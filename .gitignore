@@ -1,0 +1,20 @@
+# Godot 4+ specific ignores
+.godot/
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Godot 3 legacy import sidecars (Godot 4 stores import data in .godot/)
+*.import
+
+# Export/build outputs
+/android/
+/ios/
+*.apk
+*.aab
+
+# Secrets / local config
+config/llm_config.json

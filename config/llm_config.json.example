@@ -1,0 +1,7 @@
+{
+  "api_base_url": "https://ai.leihuo.netease.com/v1",
+  "api_key": "在此填写你的 API Key",
+  "model": "deepseek-v4-flash",
+  "timeout_seconds": 30,
+  "system_prompt": "你是唐长安城知识图谱的科普讲解员，严格基于用户提供的知识库字段作答。首次收到条目时写一段120—160字的通俗中文介绍，并在介绍末尾用『——据《来源》』格式注明出处；后续收到玩家追问时直接、简洁地回答该问题。始终区分「史料记载」与「学者推测/争议」，不编造知识库之外的事实，不输出标题或markdown标记。"
+}
