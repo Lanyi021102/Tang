@@ -18,6 +18,10 @@ config/icon="res://icon.svg"
 [autoload]
 
 MCPRuntimeProbe="*uid://bsg12huaf1u5i"
+EventBus="*res://autoload/EventBus.gd"
+DataManager="*res://autoload/DataManager.gd"
+GameManager="*res://autoload/GameManager.gd"
+NetworkManager="*res://autoload/NetworkManager.gd"
 
 [display]
 

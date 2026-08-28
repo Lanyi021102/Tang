@@ -77,6 +77,8 @@ opencode
 
 ## 四、协作规范（Feature Branch 工作流）
 
+> 详细的架构说明、分工对照表、各角色具体操作步骤见 **《[docs/协作开发说明.md](docs/协作开发说明.md)》**。
+
 `main` 分支已开启保护，**不能直接推送**，必须通过 Pull Request 合并。
 
 ### 每次开发的流程
@@ -121,10 +123,12 @@ git push -u origin feature/你的功能
 
 ```
 Tang/
+├── autoload/        # 全局单例（EventBus / GameManager / DataManager / NetworkManager）
 ├── assets/          # 图片、贴图、着色器
 ├── scenes/          # 场景（.tscn）与脚本（.gd）
 ├── data/            # 知识库数据（JSON）
 ├── config/          # 本地配置（密钥，不入库）
+├── docs/            # 协作开发说明文档
 ├── addons/          # 插件（godot_mcp）
 └── project.godot    # 项目入口
 ```
