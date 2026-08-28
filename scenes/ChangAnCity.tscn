@@ -1,19 +1,16 @@
-[gd_scene load_steps=33 format=3 uid="uid://s2tq3gpahv0t"]
+[gd_scene format=3 uid="uid://s2tq3gpahv0t"]
 
 [ext_resource type="Script" uid="uid://pt46pxstialb" path="res://scenes/changan_map.gd" id="1_map"]
 [ext_resource type="Script" uid="uid://qkv5n3pau3dr" path="res://scenes/world.gd" id="2_world"]
 [ext_resource type="Script" uid="uid://ccw4pho8qg8xg" path="res://scenes/ui_overlay.gd" id="3_ui"]
 [ext_resource type="Shader" uid="uid://i0757vw8w342" path="res://assets/tilt_shift.gdshader" id="4_ts"]
 [ext_resource type="Texture2D" uid="uid://0qpsw0rkt8gw" path="res://assets/vignette.png" id="5_vig"]
-[ext_resource type="Script" path="res://scenes/fang_tile.gd" id="7_fang"]
-[ext_resource type="Texture2D" uid="uid://cts7jxq156g52" path="res://assets/fang/fang_a.png" id="8_fa"]
-[ext_resource type="Texture2D" uid="uid://dp2lq2jaec2xk" path="res://assets/fang/fang_b.png" id="9_fb"]
-[ext_resource type="Texture2D" uid="uid://bywqhmi4f05a6" path="res://assets/fang/fang_c.png" id="10_fc"]
-[ext_resource type="Script" path="res://scenes/building.gd" id="11_bld"]
-[ext_resource type="Script" path="res://scenes/streets.gd" id="12_streets"]
-[ext_resource type="Script" path="res://scenes/npcs.gd" id="13_npcs"]
-[ext_resource type="Script" path="res://scenes/markers.gd" id="14_markers"]
-[ext_resource type="Script" path="res://scenes/clouds.gd" id="15_clouds"]
+[ext_resource type="Script" uid="uid://bab0iivd5gcaf" path="res://scenes/fang_tile.gd" id="7_fang"]
+[ext_resource type="Script" uid="uid://lqgkgq4ecu5n" path="res://scenes/building.gd" id="11_bld"]
+[ext_resource type="Script" uid="uid://ca186i5jn8qxd" path="res://scenes/streets.gd" id="12_streets"]
+[ext_resource type="Script" uid="uid://dplafltmrmv2q" path="res://scenes/npcs.gd" id="13_npcs"]
+[ext_resource type="Script" uid="uid://bk30nm0scbsrj" path="res://scenes/markers.gd" id="14_markers"]
+[ext_resource type="Script" uid="uid://cyopkvcs7gr6s" path="res://scenes/clouds.gd" id="15_clouds"]
 [ext_resource type="Texture2D" uid="uid://cru202ykvok8r" path="res://assets/Background.jpg" id="16_bg"]
 [ext_resource type="Texture2D" uid="uid://dg664htex3m2l" path="res://assets/ui/btn_back_normal.png" id="17_bn"]
 [ext_resource type="Texture2D" uid="uid://c1ee430mqjsjb" path="res://assets/ui/btn_back_hover.png" id="18_bh"]
@@ -35,48 +32,47 @@
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_ts"]
 shader = ExtResource("4_ts")
+shader_parameter/focus_y = 0.5
+shader_parameter/band_width = 0.3
+shader_parameter/blur_strength = 0.5
 
-[node name="ChangAnCity" type="Node2D"]
+[node name="ChangAnCity" type="Node2D" unique_id=1503227633]
 script = ExtResource("1_map")
 
-[node name="Camera" type="Camera2D" parent="."]
-anchor_mode = 1
+[node name="Camera" type="Camera2D" parent="." unique_id=2058195773]
 
-[node name="Ambient" type="CanvasModulate" parent="."]
+[node name="Ambient" type="CanvasModulate" parent="." unique_id=413767905]
 color = Color(0.804, 0.733, 0.596, 1)
 
-[node name="Lights" type="Node2D" parent="."]
+[node name="Lights" type="Node2D" parent="." unique_id=298874038]
 
-[node name="FangLights" type="Node2D" parent="."]
+[node name="FangLights" type="Node2D" parent="." unique_id=1784364559]
 
-[node name="vignette" type="Sprite2D" parent="."]
+[node name="vignette" type="Sprite2D" parent="." unique_id=1297247693]
+z_index = 100
 position = Vector2(96, 336)
 scale = Vector2(11.7188, 11.7188)
 texture = ExtResource("5_vig")
-z_index = 100
 
-[node name="BackBufferCopy" type="BackBufferCopy" parent="."]
+[node name="BackBufferCopy" type="BackBufferCopy" parent="." unique_id=784581246]
 copy_mode = 2
 
-[node name="Background" type="CanvasLayer" parent="."]
+[node name="Background" type="CanvasLayer" parent="." unique_id=1780380429]
 layer = -1
 
-[node name="Bg" type="TextureRect" parent="Background"]
-layout_mode = 3
+[node name="Bg" type="TextureRect" parent="Background" unique_id=66013063]
 anchors_preset = 10
 anchor_right = 1.0
 offset_bottom = 581.0
 grow_horizontal = 2
-grow_vertical = 1
+mouse_filter = 2
 texture = ExtResource("16_bg")
 expand_mode = 1
-stretch_mode = 0
-mouse_filter = 2
 
-[node name="TiltShift" type="CanvasLayer" parent="."]
+[node name="TiltShift" type="CanvasLayer" parent="." unique_id=119278803]
 layer = 50
 
-[node name="ColorRect" type="ColorRect" parent="TiltShift"]
+[node name="ColorRect" type="ColorRect" parent="TiltShift" unique_id=1092455001]
 material = SubResource("ShaderMaterial_ts")
 anchors_preset = 15
 anchor_right = 1.0
@@ -85,600 +81,297 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="World" type="Node2D" parent="."]
+[node name="World" type="Node2D" parent="." unique_id=1881195625]
 script = ExtResource("2_world")
 
-[node name="Fangs" type="Node2D" parent="World"]
+[node name="Fangs" type="Node2D" parent="World" unique_id=1905315165]
 
-[node name="坊-0-1" type="Node2D" parent="World/Fangs"]
+[node name="坊-0-1" type="Node2D" parent="World/Fangs" unique_id=342775926]
+position = Vector2(-64, 64)
 script = ExtResource("7_fang")
-position = Vector2(-64.0, 64.0)
-cell = Vector2(0, 1)
-tex = ExtResource("8_fa")
-fang_name = "修真坊"
 
-[node name="坊-1-1" type="Node2D" parent="World/Fangs"]
+[node name="坊-1-1" type="Node2D" parent="World/Fangs" unique_id=484826502]
+position = Vector2(0, 96)
 script = ExtResource("7_fang")
-position = Vector2(0.0, 96.0)
-cell = Vector2(1, 1)
-tex = ExtResource("8_fa")
-fang_name = "安定坊"
 
-[node name="坊-2-1" type="Node2D" parent="World/Fangs"]
+[node name="坊-2-1" type="Node2D" parent="World/Fangs" unique_id=211455279]
+position = Vector2(64, 128)
 script = ExtResource("7_fang")
-position = Vector2(64.0, 128.0)
-cell = Vector2(2, 1)
-tex = ExtResource("8_fa")
-fang_name = "修德坊"
 
-[node name="坊-3-1" type="Node2D" parent="World/Fangs"]
+[node name="坊-3-1" type="Node2D" parent="World/Fangs" unique_id=644386772]
+position = Vector2(128, 160)
 script = ExtResource("7_fang")
-position = Vector2(128.0, 160.0)
-cell = Vector2(3, 1)
-tex = ExtResource("8_fa")
-fang_name = "里坊"
 
-[node name="坊-11-1" type="Node2D" parent="World/Fangs"]
+[node name="坊-11-1" type="Node2D" parent="World/Fangs" unique_id=2075083945]
+position = Vector2(640, 416)
 script = ExtResource("7_fang")
-position = Vector2(640.0, 416.0)
-cell = Vector2(11, 1)
-tex = ExtResource("8_fa")
-fang_name = "十六宅坊"
 
-[node name="坊-0-2" type="Node2D" parent="World/Fangs"]
+[node name="坊-0-2" type="Node2D" parent="World/Fangs" unique_id=1639317318]
+position = Vector2(-128, 96)
 script = ExtResource("7_fang")
-position = Vector2(-128.0, 96.0)
-cell = Vector2(0, 2)
-tex = ExtResource("8_fa")
-fang_name = "义宁坊"
 
-[node name="坊-1-2" type="Node2D" parent="World/Fangs"]
+[node name="坊-1-2" type="Node2D" parent="World/Fangs" unique_id=1762115145]
+position = Vector2(-64, 128)
 script = ExtResource("7_fang")
-position = Vector2(-64.0, 128.0)
-cell = Vector2(1, 2)
-tex = ExtResource("8_fa")
-fang_name = "金城坊"
 
-[node name="坊-2-2" type="Node2D" parent="World/Fangs"]
+[node name="坊-2-2" type="Node2D" parent="World/Fangs" unique_id=793119389]
+position = Vector2(0, 160)
 script = ExtResource("7_fang")
-position = Vector2(0.0, 160.0)
-cell = Vector2(2, 2)
-tex = ExtResource("8_fa")
-fang_name = "颁政坊"
 
-[node name="坊-3-2" type="Node2D" parent="World/Fangs"]
+[node name="坊-3-2" type="Node2D" parent="World/Fangs" unique_id=46243362]
+position = Vector2(64, 192)
 script = ExtResource("7_fang")
-position = Vector2(64.0, 192.0)
-cell = Vector2(3, 2)
-tex = ExtResource("8_fa")
-fang_name = "里坊"
 
-[node name="坊-11-2" type="Node2D" parent="World/Fangs"]
+[node name="坊-11-2" type="Node2D" parent="World/Fangs" unique_id=812890145]
+position = Vector2(576, 448)
 script = ExtResource("7_fang")
-position = Vector2(576.0, 448.0)
-cell = Vector2(11, 2)
-tex = ExtResource("8_fa")
-fang_name = "永嘉坊"
 
-[node name="坊-0-3" type="Node2D" parent="World/Fangs"]
+[node name="坊-0-3" type="Node2D" parent="World/Fangs" unique_id=1063884899]
+position = Vector2(-192, 128)
 script = ExtResource("7_fang")
-position = Vector2(-192.0, 128.0)
-cell = Vector2(0, 3)
-tex = ExtResource("8_fa")
-fang_name = "居德坊"
 
-[node name="坊-1-3" type="Node2D" parent="World/Fangs"]
+[node name="坊-1-3" type="Node2D" parent="World/Fangs" unique_id=362746358]
+position = Vector2(-128, 160)
 script = ExtResource("7_fang")
-position = Vector2(-128.0, 160.0)
-cell = Vector2(1, 3)
-tex = ExtResource("8_fa")
-fang_name = "醴泉坊"
 
-[node name="坊-2-3" type="Node2D" parent="World/Fangs"]
+[node name="坊-2-3" type="Node2D" parent="World/Fangs" unique_id=949005647]
+position = Vector2(-64, 192)
 script = ExtResource("7_fang")
-position = Vector2(-64.0, 192.0)
-cell = Vector2(2, 3)
-tex = ExtResource("8_fa")
-fang_name = "布政坊"
 
-[node name="坊-3-3" type="Node2D" parent="World/Fangs"]
+[node name="坊-3-3" type="Node2D" parent="World/Fangs" unique_id=287130397]
+position = Vector2(0, 224)
 script = ExtResource("7_fang")
-position = Vector2(0.0, 224.0)
-cell = Vector2(3, 3)
-tex = ExtResource("8_fa")
-fang_name = "里坊"
 
-[node name="坊-8-3" type="Node2D" parent="World/Fangs"]
+[node name="坊-8-3" type="Node2D" parent="World/Fangs" unique_id=2024735925]
+position = Vector2(320, 384)
 script = ExtResource("7_fang")
-position = Vector2(320.0, 384.0)
-cell = Vector2(8, 3)
-tex = ExtResource("8_fa")
-fang_name = "里坊"
 
-[node name="坊-9-3" type="Node2D" parent="World/Fangs"]
+[node name="坊-9-3" type="Node2D" parent="World/Fangs" unique_id=1935411297]
+position = Vector2(384, 416)
 script = ExtResource("7_fang")
-position = Vector2(384.0, 416.0)
-cell = Vector2(9, 3)
-tex = ExtResource("8_fa")
-fang_name = "崇仁坊"
 
-[node name="坊-10-3" type="Node2D" parent="World/Fangs"]
+[node name="坊-10-3" type="Node2D" parent="World/Fangs" unique_id=1106745588]
+position = Vector2(448, 448)
 script = ExtResource("7_fang")
-position = Vector2(448.0, 448.0)
-cell = Vector2(10, 3)
-tex = ExtResource("8_fa")
-fang_name = "胜业坊"
 
-[node name="坊-11-3" type="Node2D" parent="World/Fangs"]
+[node name="坊-11-3" type="Node2D" parent="World/Fangs" unique_id=595379063]
+position = Vector2(512, 480)
 script = ExtResource("7_fang")
-position = Vector2(512.0, 480.0)
-cell = Vector2(11, 3)
-tex = ExtResource("8_fa")
-fang_name = "兴庆坊"
 
-[node name="坊-0-4" type="Node2D" parent="World/Fangs"]
+[node name="坊-0-4" type="Node2D" parent="World/Fangs" unique_id=1824124556]
+position = Vector2(-256, 160)
 script = ExtResource("7_fang")
-position = Vector2(-256.0, 160.0)
-cell = Vector2(0, 4)
-tex = ExtResource("8_fa")
-fang_name = "怀德坊"
 
-[node name="坊-1-4" type="Node2D" parent="World/Fangs"]
+[node name="坊-1-4" type="Node2D" parent="World/Fangs" unique_id=359265315]
+position = Vector2(-192, 192)
 script = ExtResource("7_fang")
-position = Vector2(-192.0, 192.0)
-cell = Vector2(1, 4)
-tex = ExtResource("8_fa")
-fang_name = "里坊"
 
-[node name="坊-2-4" type="Node2D" parent="World/Fangs"]
+[node name="坊-2-4" type="Node2D" parent="World/Fangs" unique_id=44628771]
+position = Vector2(-128, 224)
 script = ExtResource("7_fang")
-position = Vector2(-128.0, 224.0)
-cell = Vector2(2, 4)
-tex = ExtResource("8_fa")
-fang_name = "光德坊"
 
-[node name="坊-3-4" type="Node2D" parent="World/Fangs"]
+[node name="坊-3-4" type="Node2D" parent="World/Fangs" unique_id=1618031150]
+position = Vector2(-64, 256)
 script = ExtResource("7_fang")
-position = Vector2(-64.0, 256.0)
-cell = Vector2(3, 4)
-tex = ExtResource("8_fa")
-fang_name = "通义坊"
 
-[node name="坊-8-4" type="Node2D" parent="World/Fangs"]
+[node name="坊-8-4" type="Node2D" parent="World/Fangs" unique_id=1983414625]
+position = Vector2(256, 416)
 script = ExtResource("7_fang")
-position = Vector2(256.0, 416.0)
-cell = Vector2(8, 4)
-tex = ExtResource("8_fa")
-fang_name = "崇义坊"
 
-[node name="坊-11-4" type="Node2D" parent="World/Fangs"]
+[node name="坊-11-4" type="Node2D" parent="World/Fangs" unique_id=135067577]
+position = Vector2(448, 512)
 script = ExtResource("7_fang")
-position = Vector2(448.0, 512.0)
-cell = Vector2(11, 4)
-tex = ExtResource("8_fa")
-fang_name = "常乐坊"
 
-[node name="坊-0-5" type="Node2D" parent="World/Fangs"]
+[node name="坊-0-5" type="Node2D" parent="World/Fangs" unique_id=822637651]
+position = Vector2(-320, 192)
 script = ExtResource("7_fang")
-position = Vector2(-320.0, 192.0)
-cell = Vector2(0, 5)
-tex = ExtResource("8_fa")
-fang_name = "丰邑坊"
 
-[node name="坊-1-5" type="Node2D" parent="World/Fangs"]
+[node name="坊-1-5" type="Node2D" parent="World/Fangs" unique_id=212016364]
+position = Vector2(-256, 224)
 script = ExtResource("7_fang")
-position = Vector2(-256.0, 224.0)
-cell = Vector2(1, 5)
-tex = ExtResource("8_fa")
-fang_name = "长寿坊"
 
-[node name="坊-4-5" type="Node2D" parent="World/Fangs"]
+[node name="坊-4-5" type="Node2D" parent="World/Fangs" unique_id=1605968731]
+position = Vector2(-64, 320)
 script = ExtResource("7_fang")
-position = Vector2(-64.0, 320.0)
-cell = Vector2(4, 5)
-tex = ExtResource("8_fa")
-fang_name = "安业坊"
 
-[node name="坊-7-5" type="Node2D" parent="World/Fangs"]
+[node name="坊-7-5" type="Node2D" parent="World/Fangs" unique_id=1404252084]
+position = Vector2(128, 416)
 script = ExtResource("7_fang")
-position = Vector2(128.0, 416.0)
-cell = Vector2(7, 5)
-tex = ExtResource("8_fa")
-fang_name = "光福坊"
 
-[node name="坊-11-5" type="Node2D" parent="World/Fangs"]
+[node name="坊-11-5" type="Node2D" parent="World/Fangs" unique_id=1929464891]
+position = Vector2(384, 544)
 script = ExtResource("7_fang")
-position = Vector2(384.0, 544.0)
-cell = Vector2(11, 5)
-tex = ExtResource("8_fa")
-fang_name = "新昌坊"
 
-[node name="坊-0-6" type="Node2D" parent="World/Fangs"]
+[node name="坊-0-6" type="Node2D" parent="World/Fangs" unique_id=1786826778]
+position = Vector2(-384, 224)
 script = ExtResource("7_fang")
-position = Vector2(-384.0, 224.0)
-cell = Vector2(0, 6)
-tex = ExtResource("8_fa")
-fang_name = "永和坊"
 
-[node name="坊-1-6" type="Node2D" parent="World/Fangs"]
+[node name="坊-1-6" type="Node2D" parent="World/Fangs" unique_id=2145055052]
+position = Vector2(-320, 256)
 script = ExtResource("7_fang")
-position = Vector2(-320.0, 256.0)
-cell = Vector2(1, 6)
-tex = ExtResource("8_fa")
-fang_name = "永平坊"
 
-[node name="坊-4-6" type="Node2D" parent="World/Fangs"]
+[node name="坊-4-6" type="Node2D" parent="World/Fangs" unique_id=1824719070]
+position = Vector2(-128, 352)
 script = ExtResource("7_fang")
-position = Vector2(-128.0, 352.0)
-cell = Vector2(4, 6)
-tex = ExtResource("8_fa")
-fang_name = "永达坊"
 
-[node name="坊-7-6" type="Node2D" parent="World/Fangs"]
+[node name="坊-7-6" type="Node2D" parent="World/Fangs" unique_id=1715230174]
+position = Vector2(64, 448)
 script = ExtResource("7_fang")
-position = Vector2(64.0, 448.0)
-cell = Vector2(7, 6)
-tex = ExtResource("8_fa")
-fang_name = "兰陵坊"
 
-[node name="坊-10-6" type="Node2D" parent="World/Fangs"]
+[node name="坊-10-6" type="Node2D" parent="World/Fangs" unique_id=93088963]
+position = Vector2(256, 544)
 script = ExtResource("7_fang")
-position = Vector2(256.0, 544.0)
-cell = Vector2(10, 6)
-tex = ExtResource("8_fa")
-fang_name = "修行坊"
 
-[node name="坊-11-6" type="Node2D" parent="World/Fangs"]
+[node name="坊-11-6" type="Node2D" parent="World/Fangs" unique_id=1675372624]
+position = Vector2(320, 576)
 script = ExtResource("7_fang")
-position = Vector2(320.0, 576.0)
-cell = Vector2(11, 6)
-tex = ExtResource("8_fa")
-fang_name = "立政坊"
 
-[node name="坊-0-7" type="Node2D" parent="World/Fangs"]
+[node name="坊-0-7" type="Node2D" parent="World/Fangs" unique_id=340284440]
+position = Vector2(-448, 256)
 script = ExtResource("7_fang")
-position = Vector2(-448.0, 256.0)
-cell = Vector2(0, 7)
-tex = ExtResource("8_fa")
-fang_name = "和平坊"
 
-[node name="坊-1-7" type="Node2D" parent="World/Fangs"]
+[node name="坊-1-7" type="Node2D" parent="World/Fangs" unique_id=110869531]
+position = Vector2(-384, 288)
 script = ExtResource("7_fang")
-position = Vector2(-384.0, 288.0)
-cell = Vector2(1, 7)
-tex = ExtResource("8_fa")
-fang_name = "归义坊"
 
-[node name="坊-2-7" type="Node2D" parent="World/Fangs"]
+[node name="坊-2-7" type="Node2D" parent="World/Fangs" unique_id=681653419]
+position = Vector2(-320, 320)
 script = ExtResource("7_fang")
-position = Vector2(-320.0, 320.0)
-cell = Vector2(2, 7)
-tex = ExtResource("8_fa")
-fang_name = "大通坊"
 
-[node name="坊-3-7" type="Node2D" parent="World/Fangs"]
+[node name="坊-3-7" type="Node2D" parent="World/Fangs" unique_id=1702776011]
+position = Vector2(-256, 352)
 script = ExtResource("7_fang")
-position = Vector2(-256.0, 352.0)
-cell = Vector2(3, 7)
-tex = ExtResource("8_fa")
-fang_name = "昌明坊"
 
-[node name="坊-4-7" type="Node2D" parent="World/Fangs"]
+[node name="坊-4-7" type="Node2D" parent="World/Fangs" unique_id=1847195663]
+position = Vector2(-192, 384)
 script = ExtResource("7_fang")
-position = Vector2(-192.0, 384.0)
-cell = Vector2(4, 7)
-tex = ExtResource("8_fa")
-fang_name = "光行坊"
 
-[node name="坊-7-7" type="Node2D" parent="World/Fangs"]
+[node name="坊-7-7" type="Node2D" parent="World/Fangs" unique_id=81469610]
+position = Vector2(0, 480)
 script = ExtResource("7_fang")
-position = Vector2(0.0, 480.0)
-cell = Vector2(7, 7)
-tex = ExtResource("8_fa")
-fang_name = "保宁坊"
 
-[node name="坊-8-7" type="Node2D" parent="World/Fangs"]
+[node name="坊-8-7" type="Node2D" parent="World/Fangs" unique_id=476061373]
+position = Vector2(64, 512)
 script = ExtResource("7_fang")
-position = Vector2(64.0, 512.0)
-cell = Vector2(8, 7)
-tex = ExtResource("8_fa")
-fang_name = "昌乐坊"
 
-[node name="坊-9-7" type="Node2D" parent="World/Fangs"]
+[node name="坊-9-7" type="Node2D" parent="World/Fangs" unique_id=863286818]
+position = Vector2(128, 544)
 script = ExtResource("7_fang")
-position = Vector2(128.0, 544.0)
-cell = Vector2(9, 7)
-tex = ExtResource("8_fa")
-fang_name = "通善坊"
 
-[node name="坊-10-7" type="Node2D" parent="World/Fangs"]
+[node name="坊-10-7" type="Node2D" parent="World/Fangs" unique_id=423144546]
+position = Vector2(192, 576)
 script = ExtResource("7_fang")
-position = Vector2(192.0, 576.0)
-cell = Vector2(10, 7)
-tex = ExtResource("8_fa")
-fang_name = "青龙坊"
 
-[node name="坊-11-7" type="Node2D" parent="World/Fangs"]
+[node name="坊-11-7" type="Node2D" parent="World/Fangs" unique_id=1221888974]
+position = Vector2(256, 608)
 script = ExtResource("7_fang")
-position = Vector2(256.0, 608.0)
-cell = Vector2(11, 7)
-tex = ExtResource("8_fa")
-fang_name = "里坊"
 
-[node name="坊-0-8" type="Node2D" parent="World/Fangs"]
+[node name="坊-0-8" type="Node2D" parent="World/Fangs" unique_id=1768297625]
+position = Vector2(-512, 288)
 script = ExtResource("7_fang")
-position = Vector2(-512.0, 288.0)
-cell = Vector2(0, 8)
-tex = ExtResource("8_fa")
-fang_name = "永阳坊"
 
-[node name="坊-1-8" type="Node2D" parent="World/Fangs"]
+[node name="坊-1-8" type="Node2D" parent="World/Fangs" unique_id=1465478031]
+position = Vector2(-448, 320)
 script = ExtResource("7_fang")
-position = Vector2(-448.0, 320.0)
-cell = Vector2(1, 8)
-tex = ExtResource("8_fa")
-fang_name = "昭行坊"
 
-[node name="坊-2-8" type="Node2D" parent="World/Fangs"]
+[node name="坊-2-8" type="Node2D" parent="World/Fangs" unique_id=9259094]
+position = Vector2(-384, 352)
 script = ExtResource("7_fang")
-position = Vector2(-384.0, 352.0)
-cell = Vector2(2, 8)
-tex = ExtResource("8_fa")
-fang_name = "大安坊"
 
-[node name="坊-3-8" type="Node2D" parent="World/Fangs"]
+[node name="坊-3-8" type="Node2D" parent="World/Fangs" unique_id=1955680206]
+position = Vector2(-320, 384)
 script = ExtResource("7_fang")
-position = Vector2(-320.0, 384.0)
-cell = Vector2(3, 8)
-tex = ExtResource("8_fa")
-fang_name = "安乐坊"
 
-[node name="坊-4-8" type="Node2D" parent="World/Fangs"]
+[node name="坊-4-8" type="Node2D" parent="World/Fangs" unique_id=466841910]
+position = Vector2(-256, 416)
 script = ExtResource("7_fang")
-position = Vector2(-256.0, 416.0)
-cell = Vector2(4, 8)
-tex = ExtResource("8_fa")
-fang_name = "廷祚坊"
 
-[node name="坊-7-8" type="Node2D" parent="World/Fangs"]
+[node name="坊-7-8" type="Node2D" parent="World/Fangs" unique_id=1979758329]
+position = Vector2(-64, 512)
 script = ExtResource("7_fang")
-position = Vector2(-64.0, 512.0)
-cell = Vector2(7, 8)
-tex = ExtResource("8_fa")
-fang_name = "安义坊"
 
-[node name="坊-8-8" type="Node2D" parent="World/Fangs"]
+[node name="坊-8-8" type="Node2D" parent="World/Fangs" unique_id=1341365410]
+position = Vector2(0, 544)
 script = ExtResource("7_fang")
-position = Vector2(0.0, 544.0)
-cell = Vector2(8, 8)
-tex = ExtResource("8_fa")
-fang_name = "安德坊"
 
-[node name="坊-9-8" type="Node2D" parent="World/Fangs"]
+[node name="坊-9-8" type="Node2D" parent="World/Fangs" unique_id=45903129]
+position = Vector2(64, 576)
 script = ExtResource("7_fang")
-position = Vector2(64.0, 576.0)
-cell = Vector2(9, 8)
-tex = ExtResource("8_fa")
-fang_name = "通济坊"
 
-[node name="坊-10-8" type="Node2D" parent="World/Fangs"]
+[node name="坊-10-8" type="Node2D" parent="World/Fangs" unique_id=38543951]
+position = Vector2(128, 608)
 script = ExtResource("7_fang")
-position = Vector2(128.0, 608.0)
-cell = Vector2(10, 8)
-tex = ExtResource("8_fa")
-fang_name = "曲池坊"
 
-[node name="坊-11-8" type="Node2D" parent="World/Fangs"]
+[node name="坊-11-8" type="Node2D" parent="World/Fangs" unique_id=840889752]
+position = Vector2(192, 640)
 script = ExtResource("7_fang")
-position = Vector2(192.0, 640.0)
-cell = Vector2(11, 8)
-tex = ExtResource("8_fa")
-fang_name = "里坊"
 
-[node name="Streets" type="Node2D" parent="World"]
+[node name="Streets" type="Node2D" parent="World" unique_id=899071665]
 script = ExtResource("12_streets")
 
-[node name="NPCs" type="Node2D" parent="World"]
+[node name="NPCs" type="Node2D" parent="World" unique_id=1395244177]
 script = ExtResource("13_npcs")
 
-[node name="Buildings" type="Node2D" parent="World"]
+[node name="Buildings" type="Node2D" parent="World" unique_id=115411962]
 
-[node name="宫城" type="Node2D" parent="World/Buildings"]
+[node name="宫城" type="Node2D" parent="World/Buildings" unique_id=1606029755]
 script = ExtResource("11_bld")
-c0 = 4.0
-r0 = 1.0
-c1 = 8.0
-r1 = 3.0
-height = 26.0
-top_color = Color(0.847, 0.659, 0.620, 1)
-left_color = Color(0.757, 0.533, 0.478, 1)
-right_color = Color(0.612, 0.384, 0.329, 1)
-label = "宫城"
-label_color = Color(0.478, 0.165, 0.125, 1)
-label_size = 18.0
 
-[node name="皇城" type="Node2D" parent="World/Buildings"]
+[node name="皇城" type="Node2D" parent="World/Buildings" unique_id=852549593]
 script = ExtResource("11_bld")
-c0 = 4.0
-r0 = 3.0
-c1 = 8.0
-r1 = 5.0
-height = 22.0
-top_color = Color(0.867, 0.788, 0.635, 1)
-left_color = Color(0.722, 0.604, 0.408, 1)
-right_color = Color(0.576, 0.471, 0.247, 1)
-label = "皇城"
-label_color = Color(0.478, 0.353, 0.125, 1)
-label_size = 18.0
 
-[node name="大明宫" type="Node2D" parent="World/Buildings"]
+[node name="大明宫" type="Node2D" parent="World/Buildings" unique_id=2020217854]
 script = ExtResource("11_bld")
-c0 = 8.0
-r0 = 1.0
-c1 = 11.0
-r1 = 3.0
-height = 28.0
-top_color = Color(0.886, 0.788, 0.525, 1)
-left_color = Color(0.784, 0.616, 0.333, 1)
-right_color = Color(0.639, 0.486, 0.243, 1)
-label = "大明宫"
-label_color = Color(0.541, 0.416, 0.125, 1)
-label_size = 16.0
 
-[node name="兴庆宫" type="Node2D" parent="World/Buildings"]
+[node name="兴庆宫" type="Node2D" parent="World/Buildings" unique_id=494118700]
 script = ExtResource("11_bld")
-c0 = 9.0
-r0 = 4.0
-c1 = 11.0
-r1 = 6.0
-height = 18.0
-top_color = Color(0.765, 0.816, 0.690, 1)
-left_color = Color(0.612, 0.678, 0.471, 1)
-right_color = Color(0.467, 0.541, 0.337, 1)
-label = "兴庆宫"
-label_color = Color(0.333, 0.396, 0.290, 1)
-label_size = 15.0
 
-[node name="西市" type="Node2D" parent="World/Buildings"]
+[node name="西市" type="Node2D" parent="World/Buildings" unique_id=606802561]
 script = ExtResource("11_bld")
-c0 = 2.0
-r0 = 5.0
-c1 = 4.0
-r1 = 7.0
-height = 16.0
-top_color = Color(0.886, 0.839, 0.706, 1)
-left_color = Color(0.737, 0.624, 0.424, 1)
-right_color = Color(0.588, 0.482, 0.298, 1)
-label = "西市"
-label_color = Color(0.478, 0.353, 0.125, 1)
-label_size = 14.0
 
-[node name="东市" type="Node2D" parent="World/Buildings"]
+[node name="东市" type="Node2D" parent="World/Buildings" unique_id=1297676889]
 script = ExtResource("11_bld")
-c0 = 8.0
-r0 = 5.0
-c1 = 10.0
-r1 = 7.0
-height = 16.0
-top_color = Color(0.886, 0.839, 0.706, 1)
-left_color = Color(0.737, 0.624, 0.424, 1)
-right_color = Color(0.588, 0.482, 0.298, 1)
-label = "东市"
-label_color = Color(0.478, 0.353, 0.125, 1)
-label_size = 14.0
 
-[node name="明德门" type="Node2D" parent="World/Buildings"]
+[node name="明德门" type="Node2D" parent="World/Buildings" unique_id=1375726247]
 script = ExtResource("11_bld")
-c0 = 5.8
-r0 = 8.8
-c1 = 6.2
-r1 = 9.2
-height = 16.0
-top_color = Color(0.812, 0.776, 0.698, 1)
-left_color = Color(0.659, 0.624, 0.541, 1)
-right_color = Color(0.518, 0.486, 0.408, 1)
 
-[node name="春明门" type="Node2D" parent="World/Buildings"]
+[node name="春明门" type="Node2D" parent="World/Buildings" unique_id=1339459529]
 script = ExtResource("11_bld")
-c0 = 11.8
-r0 = 4.3
-c1 = 12.2
-r1 = 4.7
-height = 16.0
-top_color = Color(0.812, 0.776, 0.698, 1)
-left_color = Color(0.659, 0.624, 0.541, 1)
-right_color = Color(0.518, 0.486, 0.408, 1)
 
-[node name="通化门" type="Node2D" parent="World/Buildings"]
+[node name="通化门" type="Node2D" parent="World/Buildings" unique_id=859717912]
 script = ExtResource("11_bld")
-c0 = 11.8
-r0 = 1.8
-c1 = 12.2
-r1 = 2.2
-height = 16.0
-top_color = Color(0.812, 0.776, 0.698, 1)
-left_color = Color(0.659, 0.624, 0.541, 1)
-right_color = Color(0.518, 0.486, 0.408, 1)
 
-[node name="开远门" type="Node2D" parent="World/Buildings"]
+[node name="开远门" type="Node2D" parent="World/Buildings" unique_id=1881822202]
 script = ExtResource("11_bld")
-c0 = -0.2
-r0 = 1.8
-c1 = 0.2
-r1 = 2.2
-height = 16.0
-top_color = Color(0.812, 0.776, 0.698, 1)
-left_color = Color(0.659, 0.624, 0.541, 1)
-right_color = Color(0.518, 0.486, 0.408, 1)
 
-[node name="金光门" type="Node2D" parent="World/Buildings"]
+[node name="金光门" type="Node2D" parent="World/Buildings" unique_id=1032953236]
 script = ExtResource("11_bld")
-c0 = -0.2
-r0 = 4.8
-c1 = 0.2
-r1 = 5.2
-height = 16.0
-top_color = Color(0.812, 0.776, 0.698, 1)
-left_color = Color(0.659, 0.624, 0.541, 1)
-right_color = Color(0.518, 0.486, 0.408, 1)
 
-[node name="玄武门" type="Node2D" parent="World/Buildings"]
+[node name="玄武门" type="Node2D" parent="World/Buildings" unique_id=1063037358]
 script = ExtResource("11_bld")
-c0 = 5.8
-r0 = 0.8
-c1 = 6.2
-r1 = 1.2
-height = 16.0
-top_color = Color(0.812, 0.776, 0.698, 1)
-left_color = Color(0.659, 0.624, 0.541, 1)
-right_color = Color(0.518, 0.486, 0.408, 1)
 
-[node name="承天门" type="Node2D" parent="World/Buildings"]
+[node name="承天门" type="Node2D" parent="World/Buildings" unique_id=776219744]
 script = ExtResource("11_bld")
-c0 = 5.8
-r0 = 2.8
-c1 = 6.2
-r1 = 3.2
-height = 16.0
-top_color = Color(0.812, 0.776, 0.698, 1)
-left_color = Color(0.659, 0.624, 0.541, 1)
-right_color = Color(0.518, 0.486, 0.408, 1)
 
-[node name="朱雀门" type="Node2D" parent="World/Buildings"]
+[node name="朱雀门" type="Node2D" parent="World/Buildings" unique_id=2097242198]
 script = ExtResource("11_bld")
-c0 = 5.8
-r0 = 4.8
-c1 = 6.2
-r1 = 5.2
-height = 16.0
-top_color = Color(0.812, 0.776, 0.698, 1)
-left_color = Color(0.659, 0.624, 0.541, 1)
-right_color = Color(0.518, 0.486, 0.408, 1)
 
-[node name="丹凤门" type="Node2D" parent="World/Buildings"]
+[node name="丹凤门" type="Node2D" parent="World/Buildings" unique_id=1236268028]
 script = ExtResource("11_bld")
-c0 = 9.3
-r0 = 2.8
-c1 = 9.7
-r1 = 3.2
-height = 16.0
-top_color = Color(0.812, 0.776, 0.698, 1)
-left_color = Color(0.659, 0.624, 0.541, 1)
-right_color = Color(0.518, 0.486, 0.408, 1)
 
-[node name="Markers" type="Node2D" parent="World"]
+[node name="Markers" type="Node2D" parent="World" unique_id=1317649757]
 script = ExtResource("14_markers")
 
-[node name="Clouds" type="CanvasLayer" parent="."]
+[node name="Clouds" type="CanvasLayer" parent="." unique_id=1561475555]
 layer = 40
 
-[node name="Drawer" type="Node2D" parent="Clouds"]
+[node name="Drawer" type="Node2D" parent="Clouds" unique_id=1158037082]
 script = ExtResource("15_clouds")
 
-[node name="UI" type="CanvasLayer" parent="."]
+[node name="UI" type="CanvasLayer" parent="." unique_id=597146541]
 layer = 100
 
-[node name="HUD" type="Control" parent="UI"]
+[node name="HUD" type="Control" parent="UI" unique_id=369176411]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -687,73 +380,73 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="BtnBack" type="TextureButton" parent="UI/HUD"]
+[node name="BtnBack" type="TextureButton" parent="UI/HUD" unique_id=1514891696]
 layout_mode = 0
 offset_left = 40.0
 offset_top = 18.0
 offset_right = 136.0
 offset_bottom = 58.0
 texture_normal = ExtResource("17_bn")
-texture_hover = ExtResource("18_bh")
 texture_pressed = ExtResource("19_bp")
+texture_hover = ExtResource("18_bh")
 stretch_mode = 0
 
-[node name="BtnCodex" type="TextureButton" parent="UI/HUD"]
+[node name="BtnCodex" type="TextureButton" parent="UI/HUD" unique_id=1172246896]
 layout_mode = 0
 offset_left = 40.0
 offset_top = 66.0
 offset_right = 136.0
 offset_bottom = 106.0
 texture_normal = ExtResource("20_cn")
-texture_hover = ExtResource("21_ch")
 texture_pressed = ExtResource("22_cp")
+texture_hover = ExtResource("21_ch")
 stretch_mode = 0
 
-[node name="BtnNear" type="TextureButton" parent="UI/HUD"]
+[node name="BtnNear" type="TextureButton" parent="UI/HUD" unique_id=167553721]
 layout_mode = 0
 offset_left = 36.0
 offset_top = 300.0
 offset_right = 120.0
 offset_bottom = 344.0
 texture_normal = ExtResource("23_nn")
-texture_hover = ExtResource("24_nh")
 texture_pressed = ExtResource("25_np")
+texture_hover = ExtResource("24_nh")
 stretch_mode = 0
 
-[node name="BtnMid" type="TextureButton" parent="UI/HUD"]
+[node name="BtnMid" type="TextureButton" parent="UI/HUD" unique_id=75303039]
 layout_mode = 0
 offset_left = 36.0
 offset_top = 352.0
 offset_right = 120.0
 offset_bottom = 396.0
 texture_normal = ExtResource("26_mn")
-texture_hover = ExtResource("27_mh")
 texture_pressed = ExtResource("28_mp")
+texture_hover = ExtResource("27_mh")
 stretch_mode = 0
 
-[node name="BtnFar" type="TextureButton" parent="UI/HUD"]
+[node name="BtnFar" type="TextureButton" parent="UI/HUD" unique_id=2298080]
 layout_mode = 0
 offset_left = 36.0
 offset_top = 404.0
-offset_right = 120.0
-offset_bottom = 448.0
+offset_right = 204.0
+offset_bottom = 492.0
 texture_normal = ExtResource("29_fn")
-texture_hover = ExtResource("30_fh")
 texture_pressed = ExtResource("31_fp")
+texture_hover = ExtResource("30_fh")
 stretch_mode = 0
 
-[node name="BtnClock" type="TextureButton" parent="UI/HUD"]
+[node name="BtnClock" type="TextureButton" parent="UI/HUD" unique_id=1555892840]
 layout_mode = 0
 offset_left = 1156.0
 offset_top = 16.0
 offset_right = 1240.0
 offset_bottom = 100.0
 texture_normal = ExtResource("32_kln")
-texture_hover = ExtResource("33_klh")
 texture_pressed = ExtResource("32_kln")
+texture_hover = ExtResource("33_klh")
 stretch_mode = 0
 
-[node name="Overlay" type="Control" parent="UI"]
+[node name="Overlay" type="Control" parent="UI" unique_id=1012087800]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0

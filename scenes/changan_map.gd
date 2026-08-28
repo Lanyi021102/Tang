@@ -3,11 +3,6 @@ extends Node2D
 # 唐长安城 2.5D 45°等距鸟瞰场景
 # Tang Chang'an — 45° isometric bird's-eye view, 3 zoom levels via mouse wheel.
 
-const DATA_PATH := "res://data/changan_points.json"
-const CONFIG_PATH := "res://config/llm_config.json"
-const KEPU_KB_PATH := "res://data/kepu_kb.json"
-const HISTORY_PATH := "res://data/history_timeline.json"
-const CODEX_PATH := "res://data/codex_kb.json"
 const MENU_SCENE := "res://scenes/MainMenu.tscn"
 const UI_SCRIPT := preload("res://scenes/ui_overlay.gd")
 const FANG_DIR := "res://assets/fang/"
@@ -105,7 +100,6 @@ var _codex_open := false
 var _codex_cat := 0
 var _codex_scroll := 0.0
 
-var _http: HTTPRequest
 var _ui
 var _world
 var _npcs_node
@@ -129,20 +123,14 @@ func _iso(c: float, r: float) -> Vector2:
 
 func _ready() -> void:
 	_setup_fonts()
-	_load_data()
-	_load_config()
-	_load_kepu_kb()
-	_load_timeline()
-	_load_codex()
+	_sync_from_data()
 	_build_fangs()
 	_build_camera()
 	_build_lights()
 	_build_world()
 	_build_ui()
 	_init_npcs()
-	_http = HTTPRequest.new()
-	add_child(_http)
-	_http.request_completed.connect(_on_http_done)
+	NetworkManager.chat_response.connect(_on_chat_response)
 	_set_zoom(1, true)
 	_redraw_world()
 
@@ -153,61 +141,19 @@ func _setup_fonts() -> void:
 	font_song = kf
 	font_hei = kf
 
-func _load_data() -> void:
-	if not FileAccess.file_exists(DATA_PATH):
-		_error = "缺少数据文件：" + DATA_PATH
-		return
-	var txt := FileAccess.get_file_as_string(DATA_PATH)
-	var parsed: Variant = JSON.parse_string(txt)
-	if parsed is Dictionary and parsed.has("points"):
-		_points = parsed["points"]
-
-func _load_kepu_kb() -> void:
-	if FileAccess.file_exists(KEPU_KB_PATH):
-		var txt := FileAccess.get_file_as_string(KEPU_KB_PATH)
-		var parsed: Variant = JSON.parse_string(txt)
-		if parsed is Dictionary:
-			_kepu_kb = parsed
+func _sync_from_data() -> void:
+	_points = DataManager.points
+	_kepu_kb = DataManager.kepu_kb
+	_timeline = DataManager.timeline
+	_codex_kb = DataManager.codex_kb
+	_cfg = DataManager.llm_config
 	if _kepu_kb.is_empty():
 		_kepu_kb = KEPU
-
-func _load_timeline() -> void:
-	if FileAccess.file_exists(HISTORY_PATH):
-		var txt := FileAccess.get_file_as_string(HISTORY_PATH)
-		var parsed: Variant = JSON.parse_string(txt)
-		if parsed is Dictionary and parsed.has("timeline"):
-			_timeline = parsed["timeline"]
-
-func _load_codex() -> void:
 	_codex_collected = {}
-	if FileAccess.file_exists(CODEX_PATH):
-		var txt := FileAccess.get_file_as_string(CODEX_PATH)
-		var parsed: Variant = JSON.parse_string(txt)
-		if parsed is Dictionary:
-			_codex_kb = parsed
-			for cat in _codex_kb:
-				_codex_collected[cat] = []
-
-func _load_config() -> void:
-	_cfg = {
-		"api_base_url": "https://api.deepseek.com/v1",
-		"api_key": "",
-		"model": "deepseek-v4-flash",
-		"timeout_seconds": 30,
-		"system_prompt": "你是唐长安城知识图谱的科普讲解员，严格基于用户提供的知识库字段作答。首次收到条目时写一段120—160字的通俗中文介绍，并在介绍末尾用『——据《来源》』格式注明出处；后续收到玩家追问时直接回答该问题。始终区分史料记载与学者推测，不编造知识库之外的事实。",
-	}
-	if FileAccess.file_exists(CONFIG_PATH):
-		var txt := FileAccess.get_file_as_string(CONFIG_PATH)
-		var parsed: Variant = JSON.parse_string(txt)
-		if parsed is Dictionary:
-			for k in parsed:
-				_cfg[k] = parsed[k]
-	var env_key := OS.get_environment("LLM_API_KEY")
-	if env_key != "":
-		_cfg["api_key"] = env_key
-	var env_url := OS.get_environment("LLM_API_BASE_URL")
-	if env_url != "":
-		_cfg["api_base_url"] = env_url
+	for cat in _codex_kb:
+		_codex_collected[cat] = []
+	GameManager.current_year = _current_year
+	GameManager.time_of_day = _time_of_day
 
 func _build_fangs() -> void:
 	_fang_tex.clear()
@@ -306,6 +252,7 @@ func _set_zoom(idx: int, snap: bool = false) -> void:
 		_camera.zoom = Vector2(_target_zoom, _target_zoom)
 		_camera.position = _target_pos
 	_free_pan = false
+	GameManager.set_view_mode(["far", "mid", "near"][_zoom_idx])
 	if _ui:
 		_ui.queue_redraw()
 
@@ -380,6 +327,7 @@ func set_time(hour: float, smooth := false) -> void:
 	_target_hour = clampf(hour, 0.0, 24.0)
 	if not smooth:
 		_time_of_day = _target_hour
+	GameManager.set_time(_target_hour)
 	_ui.queue_redraw()
 
 func _update_time(delta: float) -> void:
@@ -390,6 +338,8 @@ func _update_time(delta: float) -> void:
 			_year_anim = false
 			_current_year = _year_to
 			_time_of_day = _target_hour
+			GameManager.set_year(_current_year)
+			GameManager.set_time(_time_of_day)
 			_ui.queue_redraw()
 	elif absf(_time_of_day - _target_hour) > 0.02:
 		_time_of_day = lerpf(_time_of_day, _target_hour, delta * 4.0)
@@ -1006,13 +956,13 @@ func _select_group(gi: int) -> void:
 	_kepu = []
 	_group_chat_open = true
 	_group_chat_title = "、".join(names)
+	EventBus.npc_dialogue_started.emit(gi)
 	_request_group_dialogue(g, names, gi)
 
 func _request_group_dialogue(g: Dictionary, names: PackedStringArray, gi: int) -> void:
 	var n := names.size()
 	var scene := "独处" if n == 1 else ("闲聊" if n == 2 else "结伴议论")
-	var key: String = _cfg.get("api_key", "")
-	if key == "":
+	if not NetworkManager.has_api_key():
 		_show_group_chat(g, _local_group_lines(n))
 		return
 	var period := _time_period(_time_of_day)
@@ -1023,17 +973,10 @@ func _request_group_dialogue(g: Dictionary, names: PackedStringArray, gi: int) -
 		ev_hint = "坊间正议论「" + ev + "」之事，可适当提及。"
 	var sys := "你是%d年%s的市井百姓。现在是%s。有%d个人在%s。请为每个人各写一句符合当下时代、生活状态且切合当前时段的对话（如黎明起身、清晨问安、正午吃食、午后劳作、黄昏归家、夜晚点灯等）。%s每句不超过15个字，用口语。每人一行，共%d行，不要编号、不要多余标点。" % [_current_year, era, period, n, scene, ev_hint, n]
 	_pending_group = gi
-	var base: String = _cfg.get("api_base_url", "").rstrip("/")
-	var body := {
-		"model": _cfg.get("model", "deepseek-v4-flash"),
-		"messages": [
-			{"role": "system", "content": sys},
-			{"role": "user", "content": "请生成这%d个人的对话。" % n},
-		],
-		"temperature": 0.9,
-		"max_tokens": 120,
-	}
-	_http.request(base + "/chat/completions", PackedStringArray(["Content-Type: application/json", "Authorization: Bearer " + key]), HTTPClient.METHOD_POST, JSON.stringify(body))
+	NetworkManager.request_chat([
+		{"role": "system", "content": sys},
+		{"role": "user", "content": "请生成这%d个人的对话。" % n},
+	], 0.9, 120)
 
 func _local_group_lines(n: int) -> Array:
 	var pool := ["今日米价又涨了", "东市新开了家铺子", "这坊里的桂花开了", "郎君吃过了么", "昨夜下了场小雨", "西市的胡商好多", "该回家生火做饭了", "今日的炊饼甚香"]
@@ -1081,7 +1024,9 @@ func _detect_codex(text: String) -> void:
 			if kw != "" and text.contains(kw) and not collected.has(kw):
 				collected.append(kw)
 				changed = true
+				EventBus.codex_entry_collected.emit(cat, kw)
 		_codex_collected[cat] = collected
+	GameManager.codex_collected = _codex_collected
 	if changed and _ui:
 		_ui.queue_redraw()
 
@@ -1114,6 +1059,7 @@ func _select(p: Dictionary) -> void:
 	_typing_visible = 0
 	_redraw_world()
 	_ui.queue_redraw()
+	EventBus.building_selected.emit(String(p.get("key", "")), p)
 	var sys: String = _cfg.get("system_prompt", "")
 	_messages = [
 		{"role": "system", "content": sys},
@@ -1131,6 +1077,7 @@ func _deselect() -> void:
 	_selected_fang = Vector2(-1, -1)
 	_redraw_world()
 	_ui.queue_redraw()
+	EventBus.building_deselected.emit()
 
 func ask_followup(q: String) -> void:
 	if _selected.is_empty():
@@ -1186,8 +1133,7 @@ func _followup_questions(p: Dictionary) -> Array:
 
 # ==================== LLM ====================
 func _request_llm() -> void:
-	var key: String = _cfg.get("api_key", "")
-	if key == "":
+	if not NetworkManager.has_api_key():
 		_error = "未配置 API Key，已显示知识库原文（config/llm_config.json）"
 		if _pending_intro:
 			_intro_text = _local_text
@@ -1207,24 +1153,7 @@ func _request_llm() -> void:
 		_typing_visible = 0
 	_redraw_world()
 	_ui.queue_redraw()
-	var base: String = _cfg.get("api_base_url", "")
-	base = base.rstrip("/")
-	var url := base + "/chat/completions"
-	var headers := PackedStringArray([
-		"Content-Type: application/json",
-		"Authorization: Bearer " + key,
-	])
-	var body := {
-		"model": _cfg.get("model", "deepseek-v4-flash"),
-		"messages": _messages,
-		"temperature": 0.7,
-		"max_tokens": 500,
-	}
-	var err := _http.request(url, headers, HTTPClient.METHOD_POST, JSON.stringify(body))
-	if err != OK:
-		_loading = false
-		_error = "请求失败（code %d）" % err
-		_ui.queue_redraw()
+	NetworkManager.request_chat(_messages, 0.7, 500)
 
 func _build_prompt(p: Dictionary) -> String:
 	var lines := PackedStringArray()
@@ -1250,26 +1179,12 @@ func _build_prompt(p: Dictionary) -> String:
 	lines.append("问题二")
 	return "\n".join(lines)
 
-func _on_http_done(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+func _on_chat_response(content: String, error: String) -> void:
 	_loading = false
-	if result != HTTPRequest.RESULT_SUCCESS:
-		_error = "网络错误（%d）" % result
+	if error != "":
+		_error = error
 		_ui.queue_redraw()
 		return
-	if response_code != 200:
-		_error = "API 返回 %d" % response_code
-		_ui.queue_redraw()
-		return
-	var text := body.get_string_from_utf8()
-	var parsed: Variant = JSON.parse_string(text)
-	var content := ""
-	if parsed is Dictionary:
-		var choices: Array = parsed.get("choices", [])
-		if choices.size() > 0:
-			content = String(choices[0].get("message", {}).get("content", ""))
-		else:
-			content = String(parsed.get("error", {}).get("message", ""))
-			_error = "API：%s" % content
 	if _pending_group >= 0:
 		if content != "":
 			_parse_group_response(content)
