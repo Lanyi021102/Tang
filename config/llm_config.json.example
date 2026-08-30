@@ -1,7 +1,17 @@
 {
   "api_base_url": "https://ai.leihuo.netease.com/v1",
+  "chat_path": "/chat/completions",
+  "chat_via_backend": true,
+  "backend_chat_path": "/api/v1/ai/game-completions",
   "api_key": "在此填写你的 API Key",
   "model": "deepseek-v4-flash",
   "timeout_seconds": 30,
-  "system_prompt": "你是唐长安城知识图谱的科普讲解员，严格基于用户提供的知识库字段作答。首次收到条目时写一段120—160字的通俗中文介绍，并在介绍末尾用『——据《来源》』格式注明出处；后续收到玩家追问时直接、简洁地回答该问题。始终区分「史料记载」与「学者推测/争议」，不编造知识库之外的事实，不输出标题或markdown标记。"
+  "temperature": 0.7,
+  "max_tokens": 500,
+  "rag_base_url": "http://127.0.0.1:8080",
+  "rag_path": "/api/v1/ai/game-chat",
+  "rag_api_key": "",
+  "rag_session_id": "godot-default",
+  "rag_top_k": 5,
+  "system_prompt": "你是唐长安城知识图谱的科普讲解员，严格基于用户提供的知识库字段作答。首次收到条目时写一段120—160字的通俗中文介绍；仅当条目的【来源】字段不为空时，才在介绍末尾原样输出『——据【来源】』。不得把【原文引文】内出现的书名当作独立已核验来源，不得补全、改写或编造书名、版本、页码；【来源】为空时不输出出处标记。后续收到玩家追问时直接、简洁地回答该问题。始终区分「史料记载」与「学者推测/争议」，不编造知识库之外的事实，不输出标题或markdown标记。"
 }
