@@ -1,0 +1,28 @@
+{
+  "source_count": 47,
+  "source_chunk_count": 355,
+  "entity_count": 1630,
+  "relation_count": 1950,
+  "point_count": 108,
+  "timeline_count": 29,
+  "research_claim_count": 97,
+  "entity_type_counts": {
+    "Area": 15,
+    "Building": 1240,
+    "Canal": 6,
+    "Fang": 108,
+    "Gate": 184,
+    "HistoricalEvent": 29,
+    "Road": 38,
+    "Terrain": 1,
+    "TerrainFeature": 3,
+    "WaterSource": 6
+  },
+  "orphan_relations": [],
+  "bad_relation_evidence": [],
+  "bad_chunk_sources": [],
+  "skipped_blocked_rows": 19,
+  "skipped_draft_rows": 32,
+  "include_drafts": false,
+  "ok": true
+}
