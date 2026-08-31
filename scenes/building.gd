@@ -1,5 +1,5 @@
 extends Node2D
-# 单个建筑 / 城门（等距盒体 + 可选名称标签）
+# 单个建筑 / 城门（等距盒体 + 可选贴图 + 可选名称标签）
 
 var map
 
@@ -14,6 +14,7 @@ var right_color := Color.WHITE
 var label := ""
 var label_color := Color.BLACK
 var label_size := 18.0
+var tex: Texture2D = null
 
 func _iso(c: float, r: float) -> Vector2:
 	return Vector2((c - r) * 64.0, (c + r) * 32.0)
@@ -35,7 +36,12 @@ func _draw() -> void:
 	var dn := Vector2(0, height)
 	_poly(PackedVector2Array([SW, SE, SE + dn, SW + dn]), left_color)
 	_poly(PackedVector2Array([SE, NE, NE + dn, SE + dn]), right_color)
-	_poly(PackedVector2Array([NW, NE, SE, SW]), top_color)
+	if tex:
+		var pts := PackedVector2Array([NW, NE, SE, SW])
+		var uvs := PackedVector2Array([Vector2(0.5, 0.0), Vector2(1.0, 0.5), Vector2(0.5, 1.0), Vector2(0.0, 0.5)])
+		draw_polygon(pts, PackedColorArray([Color.WHITE, Color.WHITE, Color.WHITE, Color.WHITE]), uvs, tex)
+	else:
+		_poly(PackedVector2Array([NW, NE, SE, SW]), top_color)
 	if label != "" and map != null:
 		var font: Font = map.font_song
 		var w: float = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_size).x

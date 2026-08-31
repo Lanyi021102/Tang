@@ -19,28 +19,34 @@ func _draw() -> void:
 	if map == null or map._zoom_idx < 1:
 		return
 	var zoom: float = map._camera.zoom.x
+	var is_near: bool = map._zoom_idx >= 2
 	for gi in range(map._groups.size()):
 		var g: Dictionary = map._groups[gi]
 		for m in g["members"]:
 			var p := _iso(g["c"] + m["dc"], g["r"] + m["dr"])
-			_draw_figure(p)
-	for s in map._speaking:
-		var gi: int = s["gi"]
-		if gi < 0 or gi >= map._groups.size():
-			continue
-		var g: Dictionary = map._groups[gi]
-		_draw_speak_bubble(_iso(g["c"], g["r"]), zoom, s)
+			_draw_figure(p, zoom, is_near)
+	if is_near:
+		for s in map._speaking:
+			var gi: int = s["gi"]
+			if gi < 0 or gi >= map._groups.size():
+				continue
+			var g: Dictionary = map._groups[gi]
+			_draw_speak_bubble(_iso(g["c"], g["r"]), zoom, s)
 
-func _draw_figure(p: Vector2) -> void:
-	var s := 1.0
+func _draw_figure(p: Vector2, zoom: float, is_near: bool) -> void:
+	# 近景放大人物使其清晰可见；中景显示小点
+	var s: float = 8.0 / zoom if is_near else 2.0 / zoom
 	var col := Color("#4a463c")
-	draw_circle(p + Vector2(0, -s * 1.05), s * 0.22, col.darkened(0.1))
-	draw_circle(p + Vector2(0, -s * 0.82), s * 0.16, Color("#d8c9a8"))
+	# 头
+	draw_circle(p + Vector2(0, -s * 1.05), s * 0.3, col.darkened(0.1))
+	# 脸
+	draw_circle(p + Vector2(0, -s * 0.82), s * 0.22, Color("#d8c9a8"))
+	# 身体
 	_poly(PackedVector2Array([
-		Vector2(p.x - s * 0.24, p.y - s * 0.66),
-		Vector2(p.x + s * 0.24, p.y - s * 0.66),
-		Vector2(p.x + s * 0.15, p.y),
-		Vector2(p.x - s * 0.15, p.y),
+		Vector2(p.x - s * 0.35, p.y - s * 0.6),
+		Vector2(p.x + s * 0.35, p.y - s * 0.6),
+		Vector2(p.x + s * 0.2, p.y),
+		Vector2(p.x - s * 0.2, p.y),
 	]), col)
 
 func _draw_speak_bubble(p: Vector2, zoom: float, spk: Dictionary) -> void:

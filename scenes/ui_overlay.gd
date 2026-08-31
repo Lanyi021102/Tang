@@ -52,6 +52,7 @@ func _on_codex_pressed() -> void:
 	map._hist_open = false
 	if map._codex_open:
 		map._group_chat_open = false
+		map._close_npc_panel()
 		if not map._selected.is_empty():
 			map._deselect()
 	queue_redraw()
@@ -88,6 +89,8 @@ func _draw() -> void:
 	if has:
 		_draw_panel()
 	_draw_group_chat()
+	if map != null and map._npc_panel_open:
+		_draw_npc_panel()
 	if map != null and map._clock_open:
 		_draw_clock_popup()
 	if map != null and map._hist_open:
@@ -149,6 +152,68 @@ func _draw_group_chat() -> void:
 			ky += 40.0
 			if ky > kr.end.y - 6:
 				break
+
+func _draw_npc_panel() -> void:
+	if map == null or not map._npc_panel_open:
+		return
+	var r: Rect2 = map.NPC_PANEL_RECT
+	# Panel background
+	_round_rect_fill(r, 14.0, Color("#f2efe6"))
+	_round_rect_stroke(r, 14.0, Color("#c9bfa8"), 1.5)
+	# Header bar
+	_round_rect_fill(Rect2(r.position, Vector2(r.size.x, 40)), 14.0, Color("#ddd6c2"))
+	# NPC name
+	var npc_name := "百姓"
+	if map._npc_panel_group >= 0 and map._npc_panel_group < map._groups.size():
+		var g: Dictionary = map._groups[map._npc_panel_group]
+		var names := PackedStringArray()
+		for m in g["members"]:
+			names.append(String(m["name"]))
+		npc_name = "、".join(names)
+	_text_left(map.font_song, npc_name, 17.0, INK, Vector2(r.position.x + 14, r.position.y + 25))
+	# Close button
+	var cb: Rect2 = map.npc_panel_close_rect()
+	_round_rect_fill(cb, 6.0, Color("#cf2d26"))
+	_round_rect_stroke(cb, 6.0, Color("#a01c16"), 1.5)
+	var cc: Vector2 = cb.get_center()
+	draw_line(cc + Vector2(-4, -4), cc + Vector2(4, 4), Color.WHITE, 2.5)
+	draw_line(cc + Vector2(-4, 4), cc + Vector2(4, -4), Color.WHITE, 2.5)
+	# Chat content area
+	var body := Rect2(r.position.x + 14, r.position.y + 48, r.size.x - 28, r.size.y - 48 - 72)
+	var fs := 14.0
+	var y := body.position.y
+	for m in map._npc_panel_chat:
+		var role := String(m.get("role", ""))
+		var text := String(m.get("text", ""))
+		var prefix := ""
+		var col := INK_SOFT
+		if role == "user":
+			prefix = "问："
+			col = Color("#8a5a2a")
+		elif role == "ai":
+			prefix = "答："
+			col = INK
+		elif role == "system":
+			prefix = ""
+			col = Color("#6a7a6e")
+		draw_multiline_string(map.font_hei, Vector2(body.position.x, y + map.font_hei.get_ascent(fs)), prefix + text, HORIZONTAL_ALIGNMENT_LEFT, body.size.x, fs, -1, col, BRK)
+		var tsz: Vector2 = map.font_hei.get_multiline_string_size(prefix + text, HORIZONTAL_ALIGNMENT_LEFT, body.size.x, fs, -1, BRK)
+		y += tsz.y + 6.0
+		if y > body.end.y:
+			break
+	# Typing indicator
+	if map._npc_panel_typing and map._npc_panel_typing_text != "":
+		var blink := "▌" if (Time.get_ticks_msec() / 500) % 2 == 0 else ""
+		var shown := "答：" + String(map._npc_panel_typing_text).substr(0, map._npc_panel_typing_visible) + blink
+		draw_multiline_string(map.font_hei, Vector2(body.position.x, y + map.font_hei.get_ascent(fs)), shown, HORIZONTAL_ALIGNMENT_LEFT, body.size.x, fs, -1, INK, BRK)
+	elif map._npc_panel_typing:
+		draw_multiline_string(map.font_hei, Vector2(body.position.x, y + map.font_hei.get_ascent(fs)), "答：正在思考…", HORIZONTAL_ALIGNMENT_LEFT, body.size.x, fs, -1, INK_SOFT, BRK)
+	# Topic buttons
+	var topic_colors := [Color("#7a2f22"), Color("#2e4a52"), Color("#5a4a2a")]
+	for i in range(3):
+		var br: Rect2 = map.npc_topic_button_rect(i)
+		var tc: Color = topic_colors[i]
+		_draw_window_button(br, String(map.NPC_TOPICS[i]), tc, tc)
 
 func _draw_clock_hands() -> void:
 	var r: Rect2 = map.CLOCK_RECT

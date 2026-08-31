@@ -11,6 +11,9 @@ signal building_deselected()
 
 # --- NPC 对话 ---
 signal npc_dialogue_started(group_id: int)
+signal npc_interaction_started(group_id: int)
+signal npc_interaction_topic(group_id: int, topic: String)
+signal npc_panel_closed()
 
 # --- 环境系统 ---
 signal time_of_day_changed(hour: float)
