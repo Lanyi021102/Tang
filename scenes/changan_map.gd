@@ -15,6 +15,8 @@ const HIST_YEAR_MIN := 582
 const HIST_YEAR_MAX := 907
 const SHICHEN := ["子时", "丑时", "寅时", "卯时", "辰时", "巳时", "午时", "未时", "申时", "酉时", "戌时", "亥时"]
 const CODEX_CATS := ["衣食住行", "建筑与城市规划", "历史"]
+const NPC_PANEL_RECT := Rect2(900.0, 100.0, 340.0, 480.0)
+const NPC_TOPICS := ["衣食住行", "建筑与城市规划", "历史"]
 
 # isometric tile size (2:1)
 const TW := 128.0
@@ -100,13 +102,25 @@ var _codex_open := false
 var _codex_cat := 0
 var _codex_scroll := 0.0
 
+# NPC interaction panel state
+var _npc_panel_open := false
+var _npc_panel_group := -1
+var _npc_panel_chat: Array = []
+var _npc_panel_typing := false
+var _npc_panel_typing_text := ""
+var _npc_panel_typing_visible := 0
+var _npc_panel_type_accum := 0.0
+var _npc_panel_topic := ""
+var _npc_panel_messages: Array = []
+var _npc_panel_scroll := 0.0
+
 var _ui
 var _world
 var _npcs_node
 var _markers_node
 
 # camera zoom state
-const ZOOM_LEVELS := [1.2, 3.2, 40.0]
+const ZOOM_LEVELS := [1.2, 3.2, 12.0]
 var _zoom_idx := 1
 var _target_zoom := 1.2
 var _target_pos := Vector2.ZERO
@@ -220,10 +234,42 @@ func _build_world() -> void:
 		var n = get_node_or_null("World/" + layer)
 		if n:
 			n.map = self
+	# 建筑坐标与属性
+	var bld_data := {
+		"宫城":   {"c0": 4.0, "r0": 1.0, "c1": 8.0, "r1": 3.0, "height": 28.0, "top_color": Color("#b85c4a"), "left_color": Color("#8c322a"), "right_color": Color("#7a2a22")},
+		"皇城":   {"c0": 4.0, "r0": 3.0, "c1": 8.0, "r1": 5.0, "height": 22.0, "top_color": Color("#c9a45a"), "left_color": Color("#a8823e"), "right_color": Color("#8a6a30")},
+		"大明宫": {"c0": 8.0, "r0": 1.0, "c1": 11.0, "r1": 3.0, "height": 26.0, "top_color": Color("#8a6a3a"), "left_color": Color("#6d5430"), "right_color": Color("#5a4528")},
+		"兴庆宫": {"c0": 9.0, "r0": 4.0, "c1": 11.0, "r1": 6.0, "height": 20.0, "top_color": Color("#7a9b7f"), "left_color": Color("#5e7d64"), "right_color": Color("#4a6a52")},
+		"西市":   {"c0": 2.0, "r0": 5.0, "c1": 4.0, "r1": 7.0, "height": 10.0, "top_color": Color("#b0a488"), "left_color": Color("#8a8070"), "right_color": Color("#706858")},
+		"东市":   {"c0": 8.0, "r0": 5.0, "c1": 10.0, "r1": 7.0, "height": 10.0, "top_color": Color("#b0a488"), "left_color": Color("#8a8070"), "right_color": Color("#706858")},
+		"明德门": {"c0": 5.0, "r0": 8.5, "c1": 7.0, "r1": 9.5, "height": 16.0, "top_color": Color("#9a9484"), "left_color": Color("#7a7468"), "right_color": Color("#645e52")},
+		"春明门": {"c0": 10.5, "r0": 4.0, "c1": 11.5, "r1": 5.0, "height": 14.0, "top_color": Color("#9a9484"), "left_color": Color("#7a7468"), "right_color": Color("#645e52")},
+		"通化门": {"c0": 10.5, "r0": 1.5, "c1": 11.5, "r1": 2.5, "height": 14.0, "top_color": Color("#9a9484"), "left_color": Color("#7a7468"), "right_color": Color("#645e52")},
+		"开远门": {"c0": -0.5, "r0": 1.5, "c1": 0.5, "r1": 2.5, "height": 14.0, "top_color": Color("#9a9484"), "left_color": Color("#7a7468"), "right_color": Color("#645e52")},
+		"金光门": {"c0": -0.5, "r0": 4.5, "c1": 0.5, "r1": 5.5, "height": 14.0, "top_color": Color("#9a9484"), "left_color": Color("#7a7468"), "right_color": Color("#645e52")},
+		"玄武门": {"c0": 5.0, "r0": 0.5, "c1": 7.0, "r1": 1.5, "height": 14.0, "top_color": Color("#9a9484"), "left_color": Color("#7a7468"), "right_color": Color("#645e52")},
+		"承天门": {"c0": 5.0, "r0": 2.5, "c1": 7.0, "r1": 3.5, "height": 16.0, "top_color": Color("#9a9484"), "left_color": Color("#7a7468"), "right_color": Color("#645e52")},
+		"朱雀门": {"c0": 5.0, "r0": 4.5, "c1": 7.0, "r1": 5.5, "height": 16.0, "top_color": Color("#9a9484"), "left_color": Color("#7a7468"), "right_color": Color("#645e52")},
+		"丹凤门": {"c0": 9.0, "r0": 2.5, "c1": 10.0, "r1": 3.5, "height": 16.0, "top_color": Color("#9a9484"), "left_color": Color("#7a7468"), "right_color": Color("#645e52")},
+	}
 	var buildings = get_node_or_null("World/Buildings")
 	if buildings:
 		for b in buildings.get_children():
 			b.map = self
+			if bld_data.has(b.name):
+				var d: Dictionary = bld_data[b.name]
+				b.c0 = d["c0"]
+				b.r0 = d["r0"]
+				b.c1 = d["c1"]
+				b.r1 = d["r1"]
+				b.height = d["height"]
+				b.top_color = d["top_color"]
+				b.left_color = d["left_color"]
+				b.right_color = d["right_color"]
+				b.label = b.name
+				b.label_color = Color("#f2e6cc")
+				b.label_size = 14.0
+				b.position = b._iso((d["c0"] + d["c1"]) * 0.5, (d["r0"] + d["r1"]) * 0.5)
 	var fangs = get_node_or_null("World/Fangs")
 	if fangs:
 		for f in fangs.get_children():
@@ -253,6 +299,7 @@ func _set_zoom(idx: int, snap: bool = false) -> void:
 		_camera.position = _target_pos
 	_free_pan = false
 	GameManager.set_view_mode(["far", "mid", "near"][_zoom_idx])
+	_update_fang_textures()
 	if _ui:
 		_ui.queue_redraw()
 
@@ -353,7 +400,7 @@ func _jump_to_year(year: int) -> void:
 	_ui.queue_redraw()
 
 func shichen_index(hour: float) -> int:
-	return (int(hour) % 24) / 2
+	return int(float(int(hour) % 24) / 2.0)
 
 func shichen_name(i: int) -> String:
 	return SHICHEN[i]
@@ -547,6 +594,7 @@ func _process(delta: float) -> void:
 			if _panel_raw <= 0.0:
 				_selected = {}
 	_update_typing(delta)
+	_update_npc_panel_typing(delta)
 	_update_npcs(delta)
 	_update_speaking(delta)
 	_update_group_chat(delta)
@@ -638,6 +686,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _codex_open and codex_panel_rect().has_point(wmb.position):
 				_codex_scroll = maxf(0.0, _codex_scroll - 40.0)
 				_ui.queue_redraw()
+			elif _npc_panel_open and NPC_PANEL_RECT.has_point(wmb.position):
+				_npc_panel_scroll = maxf(0.0, _npc_panel_scroll - 40.0)
+				_ui.queue_redraw()
 			elif _hist_open and hist_popup_rect().has_point(wmb.position):
 				_hist_scroll = maxf(0.0, _hist_scroll - 40.0)
 				_ui.queue_redraw()
@@ -651,6 +702,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			var wmb2 := event as InputEventMouseButton
 			if _codex_open and codex_panel_rect().has_point(wmb2.position):
 				_codex_scroll += 40.0
+				_ui.queue_redraw()
+			elif _npc_panel_open and NPC_PANEL_RECT.has_point(wmb2.position):
+				_npc_panel_scroll += 40.0
 				_ui.queue_redraw()
 			elif _hist_open and hist_popup_rect().has_point(wmb2.position):
 				_hist_scroll += 40.0
@@ -719,6 +773,19 @@ func _handle_click(screen_pos: Vector2) -> void:
 		_codex_open = false
 		_ui.queue_redraw()
 		return
+	if _npc_panel_open:
+		if NPC_PANEL_RECT.has_point(screen_pos):
+			var btn_area := NPC_PANEL_RECT.position.x + 14.0
+			var btn_y := NPC_PANEL_RECT.end.y - 64.0
+			var btn_w := (NPC_PANEL_RECT.size.x - 28.0 - 16.0) / 3.0
+			for i in range(3):
+				var br := Rect2(btn_area + float(i) * (btn_w + 8.0), btn_y, btn_w, 48.0)
+				if br.has_point(screen_pos):
+					_on_npc_topic_click(i)
+					return
+			return
+		_close_npc_panel()
+		return
 	if HIST_TIMELINE_RECT.has_point(screen_pos):
 		_hist_open = true
 		_clock_open = false
@@ -747,8 +814,16 @@ func _handle_click(screen_pos: Vector2) -> void:
 			return
 	var sgi := _speaking_group_at(screen_pos)
 	if sgi >= 0:
-		_select_group(sgi)
+		if _zoom_idx == 2:
+			_select_npc(sgi)
+		else:
+			_select_group(sgi)
 		return
+	if _zoom_idx == 2:
+		var ngi := _any_npc_group_at(screen_pos)
+		if ngi >= 0:
+			_select_npc(ngi)
+			return
 	var world_pos := _camera.get_canvas_transform().affine_inverse() * screen_pos
 	var hit := _hit_test(world_pos)
 	if not hit.is_empty():
@@ -785,10 +860,10 @@ func _fang_at(world_pos: Vector2) -> Vector2:
 func _fang_data(c: float, r: float) -> Dictionary:
 	var ci := int(c)
 	var ri := int(r)
-	var name := _fang_name_of(ci, ri)
+	var fang_name := _fang_name_of(ci, ri)
 	return {
 		"key": "FANG-%d-%d" % [ci, ri],
-		"name": name,
+		"name": fang_name,
 		"trad": "",
 		"type": "坊",
 		"zone": "坊",
@@ -871,23 +946,49 @@ func _member_offset(size: int, idx: int) -> Vector2:
 
 func _gen_route(rng: RandomNumberGenerator) -> Array:
 	var pts: Array = []
-	var c := rng.randi_range(1, GRID_COLS - 1)
-	var r := rng.randi_range(1, GRID_ROWS - 1)
-	pts.append(Vector2(c, r))
+	# 收集所有未被占据的格子
+	var free_cells: Array = []
+	for rr in range(1, GRID_ROWS):
+		for cc in range(GRID_COLS):
+			if not _occupied(cc, rr):
+				free_cells.append(Vector2(cc, rr))
+	if free_cells.is_empty():
+		pts.append(Vector2(5, 5))
+		pts.append(Vector2(6, 5))
+		return pts
+	# 随机选一个空闲格子作为起点
+	var start: Vector2 = free_cells[rng.randi() % free_cells.size()]
+	pts.append(start)
+	var c: int = int(start.x)
+	var r: int = int(start.y)
 	for i in range(rng.randi_range(6, 12)):
+		var nc: int = c
+		var nr: int = r
 		if rng.randf() < 0.5:
-			c = clampi(c + (1 if rng.randf() < 0.5 else -1), 1, GRID_COLS - 1)
+			nc = clampi(c + (1 if rng.randf() < 0.5 else -1), 0, GRID_COLS - 1)
 		else:
-			r = clampi(r + (1 if rng.randf() < 0.5 else -1), 1, GRID_ROWS - 1)
+			nr = clampi(r + (1 if rng.randf() < 0.5 else -1), 1, GRID_ROWS - 1)
+		if _occupied(nc, nr):
+			continue
+		c = nc
+		r = nr
 		pts.append(Vector2(c, r))
+	# 保证至少 2 个点
+	if pts.size() < 2:
+		pts.append(pts[0])
 	return pts
 
 func _update_npcs(delta: float) -> void:
-	if _zoom_idx < 1:
+	if _zoom_idx != 2:
 		return
 	for g in _groups:
 		var route: Array = g["route"]
+		if route.size() < 2:
+			continue
 		var wp: int = g["wp"]
+		if wp < 0 or wp >= route.size():
+			g["wp"] = 0
+			continue
 		var target: Vector2 = route[wp]
 		var cur := Vector2(g["c"], g["r"])
 		var dirv := target - cur
@@ -938,6 +1039,22 @@ func _speaking_group_at(screen_pos: Vector2) -> int:
 			return gi
 	return -1
 
+func _any_npc_group_at(screen_pos: Vector2) -> int:
+	if _zoom_idx != 2:
+		return -1
+	var zoom: float = _camera.zoom.x
+	if zoom <= 0.0:
+		zoom = 1.0
+	var hit_r := 30.0 / zoom
+	for gi in range(_groups.size()):
+		var g: Dictionary = _groups[gi]
+		for m in g["members"]:
+			var p := _iso(g["c"] + m["dc"], g["r"] + m["dr"])
+			var sp := _world_to_screen(p)
+			if screen_pos.distance_to(sp) <= hit_r:
+				return gi
+	return -1
+
 func _select_group(gi: int) -> void:
 	var g: Dictionary = _groups[gi]
 	_speaking = _speaking.filter(func(s): return int(s["gi"]) != gi)
@@ -946,6 +1063,7 @@ func _select_group(gi: int) -> void:
 		_panel_opening = false
 		_panel_raw = 0.0
 		_panel_anim_t = 0.0
+	_close_npc_panel()
 	_follow_group = gi
 	_zoom_idx = 2
 	_start_cam_anim(ZOOM_LEVELS[2], _iso(g["c"], g["r"]))
@@ -1069,12 +1187,13 @@ func _select(p: Dictionary) -> void:
 	_request_llm()
 
 func _deselect() -> void:
-	if _selected.is_empty():
+	if _selected.is_empty() and not _npc_panel_open:
 		return
 	_follow_group = -1
 	_group_chat_open = false
 	_panel_opening = false
 	_selected_fang = Vector2(-1, -1)
+	_close_npc_panel()
 	_redraw_world()
 	_ui.queue_redraw()
 	EventBus.building_deselected.emit()
@@ -1191,6 +1310,18 @@ func _on_chat_response(content: String, error: String) -> void:
 		_pending_group = -1
 		_ui.queue_redraw()
 		return
+	if _npc_panel_open and _npc_panel_topic != "":
+		if content != "":
+			content = content.strip_edges()
+			_npc_panel_messages.append({"role": "assistant", "content": content})
+			_npc_panel_typing_text = content
+			_npc_panel_typing_visible = 0
+			_npc_panel_type_accum = 0.0
+			_detect_codex_for_category(_npc_panel_topic, content)
+		_npc_panel_typing = false
+		_npc_panel_topic = ""
+		_ui.queue_redraw()
+		return
 	if content != "":
 		content = content.strip_edges()
 		if _pending_intro:
@@ -1250,6 +1381,156 @@ func _parse_group_response(content: String) -> void:
 		if clean.size() >= members.size():
 			break
 	_show_group_chat(g, clean)
+
+# ==================== NPC Interaction Panel ====================
+
+func _update_fang_textures() -> void:
+	# 远景 → 皇宫图片1（红色占位）/ 坊图片1（橙色占位）
+	# 中景·近景 → 皇宫图片2（绿色占位）/ 坊图片2（蓝色占位）
+	var is_far := _zoom_idx == 0
+	var palace_name := "palace_far.png" if is_far else "palace_near.png"
+	var fang_name := "fang_far.png" if is_far else "fang_near.png"
+	var palace_path := "res://assets/" + palace_name
+	var fang_path := "res://assets/" + fang_name
+	var palace_tex: Texture2D = load(palace_path) if ResourceLoader.exists(palace_path) else null
+	var fang_tex_loaded: Texture2D = load(fang_path) if ResourceLoader.exists(fang_path) else null
+	# 皇宫建筑名称列表（宫城、皇城、大明宫、兴庆宫）
+	var palace_names := ["宫城", "皇城", "大明宫", "兴庆宫"]
+	# Apply to building nodes (只给皇宫建筑贴皇宫贴图)
+	var buildings = get_node_or_null("World/Buildings")
+	if buildings:
+		for b in buildings.get_children():
+			if b.name in palace_names:
+				b.tex = palace_tex
+			else:
+				b.tex = null
+			b.queue_redraw()
+	# Apply to fang nodes (所有坊贴坊贴图)
+	var fangs = get_node_or_null("World/Fangs")
+	if fangs:
+		for f in fangs.get_children():
+			f.tex = fang_tex_loaded
+			f.queue_redraw()
+
+func _close_npc_panel() -> void:
+	if _npc_panel_open:
+		_npc_panel_open = false
+		_npc_panel_group = -1
+		_npc_panel_topic = ""
+		_follow_group = -1
+		EventBus.npc_panel_closed.emit()
+
+func _select_npc(gi: int) -> void:
+	var g: Dictionary = _groups[gi]
+	# Close building panel if open
+	if not _selected.is_empty():
+		_selected = {}
+		_panel_opening = false
+		_panel_raw = 0.0
+		_panel_anim_t = 0.0
+	# Also close panel animation completely
+	_panel_opening = false
+	_panel_raw = 0.0
+	_panel_anim_t = 0.0
+	_group_chat_open = false
+	_npc_panel_open = true
+	_npc_panel_group = gi
+	_npc_panel_chat = []
+	_npc_panel_typing = false
+	_npc_panel_typing_text = ""
+	_npc_panel_typing_visible = 0
+	_npc_panel_type_accum = 0.0
+	_npc_panel_topic = ""
+	_npc_panel_messages = []
+	var names := PackedStringArray()
+	for m in g["members"]:
+		names.append(String(m["name"]))
+	_npc_panel_chat.append({"role": "system", "text": "「" + "、".join(names) + "」在此，请选择话题与其交流。"})
+	EventBus.npc_interaction_started.emit(gi)
+	_ui.queue_redraw()
+
+func _on_npc_topic_click(topic_idx: int) -> void:
+	if topic_idx < 0 or topic_idx >= NPC_TOPICS.size():
+		return
+	var topic: String = NPC_TOPICS[topic_idx]
+	_npc_panel_topic = topic
+	_npc_panel_chat.append({"role": "user", "text": "请讲讲" + topic + "方面的故事。"})
+	_npc_panel_messages.append({"role": "user", "content": "请讲讲你在" + topic + "方面的故事和见闻。"})
+	_npc_panel_typing = true
+	_npc_panel_typing_text = ""
+	_npc_panel_typing_visible = 0
+	_npc_panel_type_accum = 0.0
+	if _npc_panel_group >= 0 and _npc_panel_group < _groups.size():
+		EventBus.npc_interaction_topic.emit(_npc_panel_group, topic)
+	_request_npc_topic(topic)
+	_ui.queue_redraw()
+
+func _request_npc_topic(_topic: String) -> void:
+	if not NetworkManager.has_api_key():
+		_npc_panel_chat.append({"role": "ai", "text": "（未配置 API Key，无法交流）"})
+		_npc_panel_typing = false
+		_npc_panel_topic = ""
+		_ui.queue_redraw()
+		return
+	_npc_panel_typing_text = ""
+	_npc_panel_typing_visible = 0
+	_npc_panel_type_accum = 0.0
+	NetworkManager.request_chat(_npc_panel_messages, 0.7, 500)
+
+func _build_npc_topic_prompt(topic: String) -> String:
+	var g: Dictionary = _groups[_npc_panel_group] if _npc_panel_group >= 0 and _npc_panel_group < _groups.size() else {}
+	var names := PackedStringArray()
+	if g.has("members"):
+		for m in g["members"]:
+			names.append(String(m["name"]))
+	var npc_name := "、".join(names) if names.size() > 0 else "百姓"
+	var period := _time_period(_time_of_day)
+	var era := year_era(_current_year)
+	var lines := PackedStringArray()
+	lines.append("你是%d年%s长安城中的%s，现在是%s。" % [_current_year, era, npc_name, period])
+	lines.append("请从「%s」的角度，用120-160字讲述你的见闻和故事。" % topic)
+	lines.append("要求：口语化、生动、符合唐代历史背景。")
+	return "\n".join(lines)
+
+func _detect_codex_for_category(category: String, text: String) -> void:
+	if text == "" or not _codex_kb.has(category):
+		return
+	var changed := false
+	var entries: Array = _codex_kb.get(category, [])
+	var collected: Array = _codex_collected.get(category, [])
+	for e in entries:
+		var kw := String(e.get("kw", ""))
+		if kw != "" and text.contains(kw) and not collected.has(kw):
+			collected.append(kw)
+			changed = true
+			EventBus.codex_entry_collected.emit(category, kw)
+	_codex_collected[category] = collected
+	GameManager.codex_collected = _codex_collected
+	if changed and _ui:
+		_ui.queue_redraw()
+
+func npc_panel_close_rect() -> Rect2:
+	return Rect2(NPC_PANEL_RECT.end.x - 34.0, NPC_PANEL_RECT.position.y + 7.0, 24.0, 24.0)
+
+func npc_topic_button_rect(i: int) -> Rect2:
+	var bx := NPC_PANEL_RECT.position.x + 14.0
+	var by := NPC_PANEL_RECT.end.y - 64.0
+	var bw := (NPC_PANEL_RECT.size.x - 28.0 - 16.0) / 3.0
+	return Rect2(bx + float(i) * (bw + 8.0), by, bw, 48.0)
+
+func _update_npc_panel_typing(delta: float) -> void:
+	if not _npc_panel_open or not _npc_panel_typing:
+		return
+	if _npc_panel_typing_text == "":
+		return
+	_npc_panel_type_accum += delta * _type_speed
+	var n := int(_npc_panel_type_accum)
+	_npc_panel_type_accum -= n
+	_npc_panel_typing_visible = mini(_npc_panel_typing_visible + n, _npc_panel_typing_text.length())
+	if _npc_panel_typing_visible >= _npc_panel_typing_text.length():
+		_npc_panel_typing = false
+		_npc_panel_chat.append({"role": "ai", "text": _npc_panel_typing_text})
+	_ui.queue_redraw()
 
 # ==================== POI grid positions (col, row) ====================
 const GRID_POS := {
