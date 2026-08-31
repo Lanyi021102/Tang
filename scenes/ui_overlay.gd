@@ -59,6 +59,7 @@ var _ink_selection_ring: Texture2D
 var _fade := 1.0
 var _hover_key := ""
 var _mouse_down := false
+var _hover_alpha := {}  # key -> 悬停描边透明度（随时间渐入渐出）
 var _btn_near: TextureButton
 var _btn_mid: TextureButton
 var _btn_far: TextureButton
@@ -129,13 +130,32 @@ func _load_ink_textures() -> void:
 	_ink_hover_mist = _load_optional_texture("res://assets/ui/ink/ui_hover_mist.png")
 	_ink_selection_ring = _load_optional_texture("res://assets/ui/ink/ui_selection_ink_ring.png")
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	var next_hover := _detect_ui_hover()
 	var next_down := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 	if next_hover != _hover_key or next_down != _mouse_down:
 		_hover_key = next_hover
 		_mouse_down = next_down
 		queue_redraw()
+	_update_hover_alphas(delta)
+
+# 悬停描边透明度：随时间非线性渐入渐出（UI 描边不瞬间切换）
+func _update_hover_alphas(delta: float) -> void:
+	if _hover_key != "" and not _hover_alpha.has(_hover_key):
+		_hover_alpha[_hover_key] = 0.0
+	var changed := false
+	for k in _hover_alpha.keys():
+		var target := 1.0 if k == _hover_key else 0.0
+		var cur: float = _hover_alpha[k]
+		var nv := lerpf(cur, target, delta * 9.0)
+		if absf(nv - cur) > 0.001:
+			changed = true
+		_hover_alpha[k] = nv
+	if changed:
+		queue_redraw()
+
+func _hover_alpha_of(key: String) -> float:
+	return _hover_alpha.get(key, 0.0)
 
 func _detect_ui_hover() -> String:
 	if map == null:
@@ -302,7 +322,7 @@ func _draw() -> void:
 	# 裁剪容器显隐跟随面板开关状态（关闭时隐藏，避免残留内容）
 	if map != null:
 		_hist_clip.visible = map._hist_open
-		_codex_clip.visible = map._codex_open
+		_codex_clip.visible = false
 	if map != null and map._hist_open:
 		_draw_hist_popup()
 	if map != null and map._codex_open:
@@ -327,29 +347,35 @@ func _draw_screen_ink_vignette() -> void:
 func _draw_top_function_band() -> void:
 	if map == null:
 		return
-	var band := Rect2(10.0, 16.0, 106.0, 514.0)
-	if map._left_bar_collapsed:
-		# 收起状态：只画窄条 + 展开按钮
-		_draw_texture_layer(_ink_title_dark, Rect2(6.0, 16.0, 32.0, 600.0), false, 0.62)
-		var tr: Rect2 = map.left_toggle_rect()
-		_draw_left_card(tr, "≫", "left_toggle")
-		return
-	_draw_texture_layer(_ink_title_dark, band, false, 0.62)
-	_text_left(map.font_song, "长安", 24.0, Color("#f2e6cc"), Vector2(29.0, 50.0))
-	_text_left(map.font_hei, "开元图卷", 8.0, Color("#b98a48", 0.82), Vector2(58.0, 61.0))
-	# 左侧按钮：统一为知识卡片选项（气泡卡片）视觉，覆盖圆形按钮贴图
-	var btns := [
-		{"key": "left_back", "rect": Rect2(14.0, 18.0, 100.0, 42.0), "t": "返回"},
-		{"key": "left_near", "rect": Rect2(20.0, 100.0, 88.0, 88.0), "t": "近景"},
-		{"key": "left_mid", "rect": Rect2(20.0, 206.0, 88.0, 88.0), "t": "中景"},
-		{"key": "left_far", "rect": Rect2(20.0, 312.0, 88.0, 88.0), "t": "远景"},
-		{"key": "left_codex", "rect": Rect2(20.0, 420.0, 88.0, 88.0), "t": "图鉴"},
-	]
-	for b in btns:
-		_draw_left_card(Rect2(b["rect"]), String(b["t"]), String(b["key"]))
-	# 收起按钮（底部）
-	var toggle: Rect2 = map.left_toggle_rect()
-	_draw_left_card(toggle, "≪ 收起", "left_toggle")
+	var e: float = map._ease_in_out_cubic(clampf(map._left_bar_anim, 0.0, 1.0))
+	# 展开布局（淡入量 = e）
+	if e > 0.01:
+		var band := Rect2(10.0, 16.0, 106.0, 514.0)
+		_draw_texture_layer(_ink_title_dark, band, false, 0.62 * e)
+		_text_left(map.font_song, "长安", 24.0, Color("#f2e6cc", e), Vector2(29.0, 50.0))
+		_text_left(map.font_hei, "开元图卷", 8.0, Color("#b98a48", e * 0.82), Vector2(58.0, 61.0))
+		var btns := [
+			{"key": "left_back", "rect": Rect2(14.0, 18.0, 100.0, 42.0), "t": "返回"},
+			{"key": "left_near", "rect": Rect2(20.0, 100.0, 88.0, 88.0), "t": "近景"},
+			{"key": "left_mid", "rect": Rect2(20.0, 206.0, 88.0, 88.0), "t": "中景"},
+			{"key": "left_far", "rect": Rect2(20.0, 312.0, 88.0, 88.0), "t": "远景"},
+			{"key": "left_codex", "rect": Rect2(20.0, 420.0, 88.0, 88.0), "t": "图鉴"},
+		]
+		for b in btns:
+			_draw_left_card(Rect2(b["rect"]), String(b["t"]), String(b["key"]))
+	# 收起布局（窄条 + 切换按钮，淡入量 = 1-e）
+	if e < 0.99:
+		var ca := 1.0 - e
+		_draw_texture_layer(_ink_title_dark, Rect2(6.0, 16.0, 32.0, 600.0), false, 0.62 * ca)
+		var collapsed_r := Rect2(6.0, 560.0, 32.0, 44.0)
+		var expanded_r := Rect2(14.0, 560.0, 100.0, 40.0)
+		var tr := Rect2(
+			lerpf(expanded_r.position.x, collapsed_r.position.x, ca),
+			lerpf(expanded_r.position.y, collapsed_r.position.y, ca),
+			lerpf(expanded_r.size.x, collapsed_r.size.x, ca),
+			lerpf(expanded_r.size.y, collapsed_r.size.y, ca)
+		)
+		_draw_left_card(tr, "≫" if e < 0.5 else "≪ 收起", "left_toggle")
 
 # 左侧功能按钮：与知识卡片选项（追问按钮）一致的视觉
 func _draw_left_card(r: Rect2, text: String, key: String) -> void:
@@ -362,7 +388,14 @@ func _draw_left_card(r: Rect2, text: String, key: String) -> void:
 		draw_texture_rect(_ink_chat_bubble_light, r, false, Color(1, 1, 1, 0.92))
 	_round_rect_stroke(r, 8.0, Color(0.48, 0.24, 0.12, 0.7), 1.4)
 	_draw_hover_accent(r, 8.0, key, 1.0)
-	_text_center(map.font_song, text, 14.0, label_col, r.get_center())
+	# 镜头（近景/中景/远景）、返回、图鉴 按钮：字体变大一倍、变高 1.5 倍（围绕按钮中心非均匀缩放）
+	var center := r.get_center()
+	if key in ["left_back", "left_near", "left_mid", "left_far", "left_codex"]:
+		draw_set_transform(center, 0.0, Vector2(2.0, 1.5))
+		_text_center(map.font_song, text, 14.0, label_col, Vector2.ZERO)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	else:
+		_text_center(map.font_song, text, 14.0, label_col, center)
 
 func _draw_group_chat() -> void:
 	if map == null or not map._group_chat_open:
@@ -520,31 +553,57 @@ func _draw_sun_moon() -> void:
 
 func _draw_clock_popup() -> void:
 	var pr: Rect2 = map.clock_popup_rect()
-	_draw_ink_panel(pr, true, 10.0)
+	var anim: float = clampf(map._clock_popup_anim, 0.0, 1.0)
+	var e: float = map._ease_in_out_cubic(anim)
+	var slide := (1.0 - e) * 48.0
+	var alpha := e
+	if alpha <= 0.01:
+		return
+	pr.position.y += slide
+	# 去掉黑黑背景：改为浅色半透明纸面，随时间从上方下拉淡入
+	_draw_ink_panel(pr, false, 10.0, alpha * 0.94)
 	for i in range(map.SHICHEN.size()):
 		var sr: Rect2 = map.shichen_rect(i)
+		sr.position.y += slide
 		var active: bool = map.shichen_index(map._time_of_day) == i
 		var key := "shichen_%d" % i
-		_draw_ink_component(_ink_shichen_item_active if active else _ink_shichen_item_normal, sr, 6.0, Color(0.79, 0.64, 0.36, 0.85) if active else Color(0.16, 0.26, 0.29, 0.55), Color(0.79, 0.64, 0.36, 0.35), 1.0, key, active)
-		var col := Color("#1f1810") if active else (Color("#fff0aa") if _is_hot(key) else Color("#eaf1f0"))
+		_draw_ink_component(_ink_shichen_item_active if active else _ink_shichen_item_normal, sr, 6.0, Color(0.79, 0.64, 0.36, 0.7) if active else Color(0.92, 0.9, 0.84, 0.6), Color(0.79, 0.64, 0.36, 0.35), alpha, key, active)
+		var col := Color("#1f1810") if active else (Color("#fff0aa") if _is_hot(key) else Color("#3a3428"))
 		_text_center(map.font_song, map.shichen_name(i), 14.0, col, sr.get_center())
 
 func _draw_hist_timeline() -> void:
-	if map._timeline_collapsed:
-		# 收起状态：底部窄条中央绘制展开按钮（上下展开）
-		var tr: Rect2 = map.timeline_toggle_rect()
-		_draw_left_card(tr, "▲ 展开时间轴", "timeline_toggle")
-		return
+	var anim: float = clampf(map._timeline_anim, 0.0, 1.0)
+	var e: float = map._ease_in_out_cubic(anim)
+	# 收起/展开切换按钮：位置随动画在两种状态间滑动
+	var collapsed_r := Rect2(560.0, 694.0, 160.0, 26.0)
+	var expanded_r := Rect2(560.0, 614.0, 160.0, 26.0)
+	var k: float = 1.0 - e
+	var tr := Rect2(
+		lerpf(expanded_r.position.x, collapsed_r.position.x, k),
+		lerpf(expanded_r.position.y, collapsed_r.position.y, k),
+		lerpf(expanded_r.size.x, collapsed_r.size.x, k),
+		lerpf(expanded_r.size.y, collapsed_r.size.y, k)
+	)
+	var label := "▲ 展开时间轴" if anim < 0.5 else "▼ 收起"
+	_draw_left_card(tr, label, "timeline_toggle")
+	# 展开状态的时间轴内容：随动画从下方滑入 + 淡入（非线性）
+	if anim > 0.02:
+		draw_set_transform(Vector2(0.0, (1.0 - e) * 60.0), 0.0, Vector2.ONE)
+		_draw_timeline_content(e)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+func _draw_timeline_content(alpha: float) -> void:
 	var r: Rect2 = map.HIST_TIMELINE_RECT
 	var bar := Rect2(r.position.x + 18.0, r.position.y + 18.0, r.size.x - 36.0, 6.0)
 	if _ink_timeline_track:
-		draw_texture_rect(_ink_timeline_track, Rect2(r.position.x, r.position.y + 2.0, r.size.x, 34.0), false, Color(1, 1, 1, 0.76))
+		draw_texture_rect(_ink_timeline_track, Rect2(r.position.x, r.position.y + 2.0, r.size.x, 34.0), false, Color(1, 1, 1, 0.76 * alpha))
 	else:
-		_round_rect_fill(bar, 4.0, Color(0.18, 0.29, 0.32, 0.5))
-		_round_rect_stroke(bar, 6.0, Color(0.79, 0.64, 0.36, 0.6), 1.5)
-	if _is_hot("timeline"):
-		_draw_texture_layer(_ink_hover_mist, Rect2(r.position + Vector2(330.0, -20.0), Vector2(450.0, 82.0)), false, 0.38)
-		_round_rect_stroke(Rect2(bar.position.x - 8.0, bar.position.y - 6.0, bar.size.x + 16.0, 18.0), 6.0, Color(0.95, 0.78, 0.36, 0.62), 1.0)
+		_round_rect_fill(bar, 4.0, Color(0.18, 0.29, 0.32, 0.5 * alpha))
+		_round_rect_stroke(bar, 6.0, Color(0.79, 0.64, 0.36, 0.6 * alpha), 1.5)
+	var hot_tl: float = _hover_alpha_of("timeline")
+	if hot_tl > 0.01:
+		_draw_texture_layer(_ink_hover_mist, Rect2(r.position + Vector2(330.0, -20.0), Vector2(450.0, 82.0)), false, 0.38 * alpha * hot_tl)
+		_round_rect_stroke(Rect2(bar.position.x - 8.0, bar.position.y - 6.0, bar.size.x + 16.0, 18.0), 6.0, Color(0.99, 0.97, 0.9, 0.62 * alpha * hot_tl), 1.0)
 	var y0: float = map.HIST_YEAR_MIN
 	var y1: float = map.HIST_YEAR_MAX
 	for i in range(map._timeline.size()):
@@ -552,38 +611,35 @@ func _draw_hist_timeline() -> void:
 		var y: float = ev["year"]
 		var t := (y - y0) / (y1 - y0)
 		var ex := bar.position.x + t * bar.size.x
-		var hot: bool = _is_hot("timeline_ev_%d" % i)
-		if hot:
-			# hover 高亮：放大节点 + 金色光晕
+		var hot: float = _hover_alpha_of("timeline_ev_%d" % i)
+		if hot > 0.01:
+			# hover 高亮：放大节点 + 金色光晕（随悬停渐入）
 			if _ink_timeline_node_active:
-				draw_texture_rect(_ink_timeline_node_active, Rect2(ex - 14.0, bar.get_center().y - 14.0, 28.0, 28.0), false, Color(1, 1, 1, 1.0))
+				draw_texture_rect(_ink_timeline_node_active, Rect2(ex - 14.0, bar.get_center().y - 14.0, 28.0, 28.0), false, Color(1, 1, 1, 1.0 * alpha * hot))
 			else:
-				draw_circle(Vector2(ex, bar.get_center().y), 5.0, Color("#fff0aa"))
-				draw_arc(Vector2(ex, bar.get_center().y), 7.0, 0.0, TAU, 24, Color(0.97, 0.83, 0.46, 0.95), 2.0)
-			draw_arc(Vector2(ex, bar.get_center().y), 10.0, 0.0, TAU, 28, Color(1.0, 0.9, 0.55, 0.55), 1.5)
+				draw_circle(Vector2(ex, bar.get_center().y), 5.0, Color(1, 0.94, 0.67, alpha * hot))
+				draw_arc(Vector2(ex, bar.get_center().y), 7.0, 0.0, TAU, 24, Color(0.97, 0.83, 0.46, 0.95 * alpha * hot), 2.0)
+			draw_arc(Vector2(ex, bar.get_center().y), 10.0, 0.0, TAU, 28, Color(1.0, 0.9, 0.55, 0.55 * alpha * hot), 1.5)
 		elif _ink_timeline_node:
-			draw_texture_rect(_ink_timeline_node, Rect2(ex - 9.0, bar.get_center().y - 9.0, 18.0, 18.0), false, Color(1, 1, 1, 0.78))
+			draw_texture_rect(_ink_timeline_node, Rect2(ex - 9.0, bar.get_center().y - 9.0, 18.0, 18.0), false, Color(1, 1, 1, 0.78 * alpha))
 		else:
-			draw_circle(Vector2(ex, bar.get_center().y), 3.0, Color(0.79, 0.64, 0.36, 0.85))
+			draw_circle(Vector2(ex, bar.get_center().y), 3.0, Color(0.79, 0.64, 0.36, 0.85 * alpha))
 	# 当前年份节点位置（支持滑动动画，用插值年份）
 	var disp_year: float = map.display_year()
 	var t2 := (disp_year - y0) / (y1 - y0)
 	var px := bar.position.x + t2 * bar.size.x
 	if _ink_gold_dust:
-		draw_texture_rect(_ink_gold_dust, Rect2(px - 150.0, bar.get_center().y - 13.0, 300.0, 26.0), false, Color(1, 1, 1, 0.58))
+		draw_texture_rect(_ink_gold_dust, Rect2(px - 150.0, bar.get_center().y - 13.0, 300.0, 26.0), false, Color(1, 1, 1, 0.58 * alpha))
 	if _ink_timeline_node_active:
-		draw_texture_rect(_ink_timeline_node_active, Rect2(px - 18.0, bar.get_center().y - 18.0, 36.0, 36.0), false, Color(1, 1, 1, 1.0))
+		draw_texture_rect(_ink_timeline_node_active, Rect2(px - 18.0, bar.get_center().y - 18.0, 36.0, 36.0), false, Color(1, 1, 1, 1.0 * alpha))
 	else:
-		draw_circle(Vector2(px, bar.get_center().y), 7.0, Color("#efe6d0"))
-		draw_arc(Vector2(px, bar.get_center().y), 7.0, 0.0, TAU, 20, DAIQING, 2.5)
+		draw_circle(Vector2(px, bar.get_center().y), 7.0, Color(0.94, 0.9, 0.82, alpha))
+		draw_arc(Vector2(px, bar.get_center().y), 7.0, 0.0, TAU, 20, Color(DAIQING.r, DAIQING.g, DAIQING.b, 1.0 * alpha), 2.5)
 	var year_int: int = int(round(disp_year))
-	_text_center(map.font_song, "%d" % year_int, 15.0, Color("#f4d88d"), Vector2(px, bar.end.y + 23.0))
-	_text_center(map.font_hei, map.year_era(year_int), 10.0, Color("#d8c9a0", 0.9), Vector2(px, bar.end.y + 39.0))
-	_text_left(map.font_hei, "582 开皇二年", 11.0, Color("#efe1b7", 0.76), Vector2(r.position.x + 10.0, r.end.y - 8.0))
-	_text_right(map.font_hei, "907 唐亡", 11.0, Color("#efe1b7", 0.76), Vector2(r.end.x - 10.0, r.end.y - 8.0))
-	# 收起按钮（时间轴右下角，向下收起）
-	var toggle: Rect2 = map.timeline_toggle_rect()
-	_draw_left_card(toggle, "▼ 收起", "timeline_toggle")
+	_text_center(map.font_song, "%d" % year_int, 15.0, Color(0.96, 0.85, 0.55, alpha), Vector2(px, bar.end.y + 23.0))
+	_text_center(map.font_hei, map.year_era(year_int), 10.0, Color(0.85, 0.79, 0.63, 0.9 * alpha), Vector2(px, bar.end.y + 39.0))
+	_text_left(map.font_hei, "582 开皇二年", 11.0, Color(0.94, 0.88, 0.72, 0.76 * alpha), Vector2(r.position.x + 10.0, r.end.y - 8.0))
+	_text_right(map.font_hei, "907 唐亡", 11.0, Color(0.94, 0.88, 0.72, 0.76 * alpha), Vector2(r.end.x - 10.0, r.end.y - 8.0))
 
 func _draw_hist_popup() -> void:
 	var pr: Rect2 = map.hist_popup_rect()
@@ -618,41 +674,17 @@ func _draw_codex_panel() -> void:
 		var tab_col := Color("#1f1810") if active else (Color("#fff0aa") if _is_hot(key) else Color("#eaf1f0"))
 		_text_center(map.font_song, map.codex_cat_name(i), 13.0, tab_col, cr.get_center() + Vector2(0.0, -3.0))
 		_text_center(map.font_hei, "%d/%d" % [cnt, total], 9.0, Color("#6a4b25", 0.88) if active else Color("#b6a37c", 0.7), cr.get_center() + Vector2(0.0, 12.0))
-	var entries: Array = map.codex_entries(map._codex_cat)
-	var collected: Array = map.codex_collected_list(map._codex_cat)
-	var list_top: float = pr.position.y + 116.0
-	var detail_rect: Rect2 = map.codex_detail_rect()
-	var list_bottom: float = detail_rect.position.y - 8.0
-	var focus: int = clampi(map._codex_focus, 0, maxi(0, entries.size() - 1))
-	# 条目列表区使用裁剪容器：遮罩式裁剪，滚动时边框外内容被隐藏
-	_codex_clip.position = Vector2(pr.position.x + 8.0, list_top)
-	_codex_clip.size = Vector2(pr.size.x - 16.0, list_bottom - list_top)
+	# 知识卡片轮播：放入裁剪容器内绘制，超出外框的部分被隐藏
+	var area: Rect2 = map.codex_card_area()
+	_codex_clip.kind = "codex_cards"
+	_codex_clip.position = area.position
+	_codex_clip.size = area.size
+	_codex_clip.visible = true
 	_codex_clip.queue_redraw()
-	_draw_codex_detail(entries, collected, focus)
-	if entries.is_empty():
+	if map.codex_card_count() <= 0:
 		_text_center(map.font_hei, "暂无图鉴数据", 14.0, Color(0.7, 0.74, 0.72), pr.get_center())
 
-func _draw_codex_detail(entries: Array, collected: Array, focus: int) -> void:
-	var dr: Rect2 = map.codex_detail_rect()
-	_draw_ink_component(_ink_kepu_box, dr, 5.0, Color("#e9eadb", 0.9), Color("#d4ad62", 0.42), 0.92, "codex_detail")
-	if entries.is_empty():
-		return
-	var e = entries[focus]
-	var kw := String(e.get("kw", ""))
-	var got: bool = collected.has(kw)
-	var title: String = kw if got else "未辨残卷"
-	var desc: String = String(e.get("desc", "")) if got else "线索尚未归档。靠近坊市、建筑或对话触发后，将在此处显影。"
-	_text_left(map.font_song, title, 22.0, Color("#241a11"), Vector2(dr.position.x + 14.0, dr.position.y + 29.0))
-	draw_circle(Vector2(dr.position.x + 103.0, dr.position.y + 20.0), 3.0, Color("#c84f28", 0.86))
-	draw_multiline_string(map.font_hei, Vector2(dr.position.x + 15.0, dr.position.y + 54.0), desc, HORIZONTAL_ALIGNMENT_LEFT, dr.size.x - 30.0, 12.0, 2, Color("#554a37"), BRK)
-	var meta_y: float = dr.position.y + 92.0
-	_text_left(map.font_hei, "所属", 11.0, Color("#805d2d", 0.86), Vector2(dr.position.x + 16.0, meta_y))
-	_text_left(map.font_hei, map.codex_cat_name(map._codex_cat), 12.0, Color("#352619", 0.9), Vector2(dr.position.x + 62.0, meta_y))
-	_text_left(map.font_hei, "状态", 11.0, Color("#805d2d", 0.86), Vector2(dr.position.x + 178.0, meta_y))
-	_text_left(map.font_hei, "已收录" if got else "待发现", 12.0, Color("#352619", 0.9), Vector2(dr.position.x + 224.0, meta_y))
-	var ill: Rect2 = Rect2(dr.end.x - 104.0, dr.end.y - 72.0, 86.0, 58.0)
-	_draw_codex_illustration(ill, got)
-
+# 图鉴知识卡片轮播：中卡聚焦、两侧卡片泛白退后，滑动非线性
 func _draw_codex_illustration(r: Rect2, revealed: bool) -> void:
 	_round_rect_fill(r, 3.0, Color("#161815", 0.13))
 	_round_rect_stroke(r, 3.0, Color("#8a6a3a", 0.32), 1.0)
@@ -716,17 +748,18 @@ func _draw_ink_header(rect: Rect2, dark: bool, radius: float, alpha := 1.0) -> v
 	_draw_texture_layer(_ink_separator, Rect2(rect.position + Vector2(18.0, rect.size.y - 7.0), Vector2(rect.size.x - 36.0, 18.0)), false, 0.72 * alpha)
 
 func _draw_hover_accent(rect: Rect2, radius: float, key: String, alpha := 1.0) -> void:
-	if not _is_hot(key):
+	var ha := _hover_alpha_of(key)
+	if ha <= 0.001:
 		return
 	var glow := rect.grow(8.0)
 	if _ink_hover_mist:
-		draw_texture_rect(_ink_hover_mist, glow, false, Color(1, 1, 1, 0.48 * alpha))
-	var stroke_alpha := 0.72 * alpha
-	var stroke_width := 1.5
+		draw_texture_rect(_ink_hover_mist, glow, false, Color(1, 1, 1, 0.5 * alpha * ha))
+	var stroke_alpha := 0.9 * alpha * ha
+	var stroke_width := 2.0
 	if _is_pressed(key):
-		stroke_alpha = 0.96 * alpha
-		stroke_width = 2.3
-	_round_rect_stroke(rect.grow(1.0), radius + 1.0, Color(0.95, 0.78, 0.36, stroke_alpha), stroke_width)
+		stroke_alpha = 1.0 * alpha * maxf(ha, 0.85)
+		stroke_width = 2.8
+	_round_rect_stroke(rect.grow(1.0), radius + 1.0, Color(0.99, 0.97, 0.9, stroke_alpha), stroke_width)
 
 func _draw_ink_component(tex: Texture2D, rect: Rect2, radius: float, fallback: Color, border: Color, alpha := 1.0, key := "", active := false) -> void:
 	if tex:

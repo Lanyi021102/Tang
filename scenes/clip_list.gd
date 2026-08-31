@@ -18,6 +18,80 @@ func _draw() -> void:
 		_draw_hist_list()
 	elif kind == "codex":
 		_draw_codex_list()
+	elif kind == "codex_cards":
+		_draw_codex_cards()
+
+# ==================== 图鉴知识卡片轮播（裁剪容器内，超出外框隐藏） ====================
+func _draw_codex_cards() -> void:
+	var map = overlay.map
+	var area: Rect2 = map.codex_card_area()
+	var csize: Vector2 = map.codex_card_size()
+	var stride: float = map.codex_card_stride()
+	var entries: Array = map.codex_entries(map._codex_cat)
+	var collected: Array = map.codex_collected_list(map._codex_cat)
+	var center_screen := Vector2(area.get_center().x, area.get_center().y)
+	var anim: float = map._codex_focus_anim
+	for i in range(entries.size()):
+		var d := anim - float(i)
+		if absf(d) > 1.7:
+			continue
+		var fd := clampf(absf(d), 0.0, 1.0)
+		var focus_amount := 1.0 - fd
+		var scale := lerpf(1.0, 0.84, fd)
+		var w := csize.x * scale
+		var h := csize.y * scale
+		var cx := center_screen.x - d * stride
+		var card_screen := Rect2(cx - w * 0.5, center_screen.y - h * 0.5, w, h)
+		var card := Rect2(card_screen.position - position, card_screen.size)
+		_draw_codex_card(card, entries[i], collected, focus_amount)
+
+func _draw_codex_card(card: Rect2, e: Dictionary, collected: Array, focus_amount: float) -> void:
+	var map = overlay.map
+	var kw := String(e.get("kw", ""))
+	var got: bool = collected.has(kw)
+	var title := kw if got else "未辨残卷"
+	var desc := String(e.get("desc", "")) if got else "线索尚未归档。靠近坊市、建筑或对话触发后，将在此处显影。"
+	_round_rect_fill(card, 8.0, Color(0.97, 0.94, 0.87, 0.96))
+	_round_rect_stroke(card, 8.0, Color(0.5, 0.42, 0.3, 0.5), 1.2)
+	if focus_amount >= 0.98:
+		_round_rect_stroke(card.grow(-2.0), 6.0, Color(0.93, 0.75, 0.34, 0.5), 1.4)
+	var img_h := card.size.y * 0.5
+	var img_r := Rect2(card.position + Vector2(9.0, 9.0), Vector2(card.size.x - 18.0, img_h - 18.0))
+	_draw_codex_image_placeholder(img_r, got)
+	var text_top := card.position.y + img_h + 8.0
+	_text_left(map.font_song, title, 26.0, Color("#241a11"), Vector2(card.position.x + 14.0, text_top + 27.0))
+	draw_multiline_string(map.font_hei, Vector2(card.position.x + 14.0, text_top + 56.0), desc, HORIZONTAL_ALIGNMENT_LEFT, card.size.x - 28.0, 12.0, 2, Color("#554a37"), BRK)
+	if focus_amount < 1.0:
+		var wht := (1.0 - focus_amount) * 0.62
+		_round_rect_fill(card, 8.0, Color(0.96, 0.95, 0.9, wht))
+
+func _draw_codex_image_placeholder(r: Rect2, revealed: bool) -> void:
+	var map = overlay.map
+	_round_rect_fill(r, 4.0, Color("#e6e1d2", 0.6) if revealed else Color("#dcd6ca", 0.42))
+	_round_rect_stroke(r, 4.0, Color("#8a6a3a", 0.36), 1.0)
+	var alpha := 0.72 if revealed else 0.4
+	var pen := Color("#3a3021", alpha)
+	var ground_y := r.end.y - 13.0
+	_poly(PackedVector2Array([
+		Vector2(r.position.x + 6.0, ground_y),
+		Vector2(r.position.x + r.size.x * 0.34, r.position.y + r.size.y * 0.26),
+		Vector2(r.position.x + r.size.x * 0.6, ground_y - 2.0),
+	]), Color("#4b4231", alpha * 0.6))
+	_poly(PackedVector2Array([
+		Vector2(r.position.x + r.size.x * 0.44, ground_y - 1.0),
+		Vector2(r.position.x + r.size.x * 0.75, r.position.y + r.size.y * 0.32),
+		Vector2(r.end.x - 6.0, ground_y),
+	]), Color("#3a3021", alpha * 0.72))
+	draw_line(Vector2(r.position.x + 8.0, ground_y), Vector2(r.end.x - 8.0, ground_y - 2.0), pen, 1.4)
+	var hx := r.position.x + r.size.x * 0.5
+	var py := ground_y - 12.0
+	draw_line(Vector2(hx - 15.0, ground_y), Vector2(hx + 15.0, ground_y), pen, 1.6)
+	draw_line(Vector2(hx - 15.0, ground_y), Vector2(hx - 15.0, py - 8.0), pen, 1.4)
+	draw_line(Vector2(hx + 15.0, ground_y), Vector2(hx + 15.0, py - 8.0), pen, 1.4)
+	draw_line(Vector2(hx - 15.0, py - 8.0), Vector2(hx, py - 15.0), pen, 1.4)
+	draw_line(Vector2(hx + 15.0, py - 8.0), Vector2(hx, py - 15.0), pen, 1.4)
+	if not revealed:
+		_text_center(map.font_hei, "影像待显影", 12.0, Color(0.5, 0.5, 0.46, 0.9), r.get_center())
 
 # ==================== 大事记列表 ====================
 func _draw_hist_list() -> void:
@@ -77,17 +151,18 @@ func _draw_texture_layer(tex: Texture2D, rect: Rect2, tile: bool, alpha: float) 
 	draw_texture_rect(tex, rect, tile, Color(1, 1, 1, alpha))
 
 func _draw_hover_accent(rect: Rect2, radius: float, key: String, alpha := 1.0) -> void:
-	if not _is_hot(key):
+	var ha: float = overlay._hover_alpha_of(key)
+	if ha <= 0.001:
 		return
 	var glow := rect.grow(8.0)
 	if overlay._ink_hover_mist:
-		draw_texture_rect(overlay._ink_hover_mist, glow, false, Color(1, 1, 1, 0.48 * alpha))
-	var stroke_alpha := 0.72 * alpha
-	var stroke_width := 1.5
+		draw_texture_rect(overlay._ink_hover_mist, glow, false, Color(1, 1, 1, 0.5 * alpha * ha))
+	var stroke_alpha := 0.9 * alpha * ha
+	var stroke_width := 2.0
 	if _is_pressed(key):
-		stroke_alpha = 0.96 * alpha
-		stroke_width = 2.3
-	_round_rect_stroke(rect.grow(1.0), radius + 1.0, Color(0.95, 0.78, 0.36, stroke_alpha), stroke_width)
+		stroke_alpha = 1.0 * alpha * maxf(ha, 0.85)
+		stroke_width = 2.8
+	_round_rect_stroke(rect.grow(1.0), radius + 1.0, Color(0.99, 0.97, 0.9, stroke_alpha), stroke_width)
 
 func _draw_ink_component(tex: Texture2D, rect: Rect2, radius: float, fallback: Color, border: Color, alpha := 1.0, key := "", active := false) -> void:
 	if tex:
