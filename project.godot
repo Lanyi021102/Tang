@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Damoxing"
-run/main_scene="res://scenes/MainMenu.tscn"
+run/main_scene="res://scenes/Start.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
 config/icon="res://icon.svg"
 
@@ -22,6 +22,7 @@ EventBus="*res://autoload/EventBus.gd"
 DataManager="*res://autoload/DataManager.gd"
 GameManager="*res://autoload/GameManager.gd"
 NetworkManager="*res://autoload/NetworkManager.gd"
+SceneTransition="*res://autoload/SceneTransition.gd"
 
 [display]
 

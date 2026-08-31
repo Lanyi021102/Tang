@@ -11,6 +11,7 @@
 [ext_resource type="Script" uid="uid://dplafltmrmv2q" path="res://scenes/npcs.gd" id="13_npcs"]
 [ext_resource type="Script" uid="uid://bk30nm0scbsrj" path="res://scenes/markers.gd" id="14_markers"]
 [ext_resource type="Script" uid="uid://cyopkvcs7gr6s" path="res://scenes/clouds.gd" id="15_clouds"]
+[ext_resource type="Script" path="res://scenes/outline_layer.gd" id="14_outline"]
 [ext_resource type="Texture2D" uid="uid://cru202ykvok8r" path="res://assets/Background.jpg" id="16_bg"]
 [ext_resource type="Texture2D" uid="uid://dg664htex3m2l" path="res://assets/ui/btn_back_normal.png" id="17_bn"]
 [ext_resource type="Texture2D" uid="uid://c1ee430mqjsjb" path="res://assets/ui/btn_back_hover.png" id="18_bh"]
@@ -362,6 +363,9 @@ script = ExtResource("11_bld")
 [node name="Markers" type="Node2D" parent="World" unique_id=1317649757]
 script = ExtResource("14_markers")
 
+[node name="OutlineLayer" type="Node2D" parent="World" unique_id=1317649758]
+script = ExtResource("14_outline")
+
 [node name="Clouds" type="CanvasLayer" parent="." unique_id=1561475555]
 layer = 40
 
@@ -380,70 +384,116 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
+[node name="LeftOpaqueBand" type="ColorRect" parent="UI/HUD"]
+layout_mode = 0
+offset_right = 128.0
+offset_bottom = 720.0
+mouse_filter = 2
+color = Color(0.02, 0.024, 0.022, 1)
+
+[node name="LeftGuard" type="ColorRect" parent="UI/HUD"]
+layout_mode = 0
+offset_right = 128.0
+offset_bottom = 648.0
+mouse_filter = 0
+color = Color(0, 0, 0, 0)
+
+[node name="BottomOpaqueBand" type="ColorRect" parent="UI/HUD"]
+layout_mode = 0
+offset_top = 602.0
+offset_right = 1280.0
+offset_bottom = 720.0
+mouse_filter = 2
+color = Color(0.02, 0.024, 0.022, 1)
+
+[node name="BottomUpperGuard" type="ColorRect" parent="UI/HUD"]
+layout_mode = 0
+offset_top = 602.0
+offset_right = 1280.0
+offset_bottom = 648.0
+mouse_filter = 0
+color = Color(0, 0, 0, 0)
+
+[node name="BottomLeftGuard" type="ColorRect" parent="UI/HUD"]
+layout_mode = 0
+offset_top = 648.0
+offset_right = 88.0
+offset_bottom = 720.0
+mouse_filter = 0
+color = Color(0, 0, 0, 0)
+
+[node name="BottomRightGuard" type="ColorRect" parent="UI/HUD"]
+layout_mode = 0
+offset_left = 1192.0
+offset_top = 648.0
+offset_right = 1280.0
+offset_bottom = 720.0
+mouse_filter = 0
+color = Color(0, 0, 0, 0)
+
+[node name="BottomLowerGuard" type="ColorRect" parent="UI/HUD"]
+layout_mode = 0
+offset_left = 88.0
+offset_top = 698.0
+offset_right = 1192.0
+offset_bottom = 720.0
+mouse_filter = 0
+color = Color(0, 0, 0, 0)
+
 [node name="BtnBack" type="TextureButton" parent="UI/HUD" unique_id=1514891696]
 layout_mode = 0
-offset_left = 40.0
+offset_left = 14.0
 offset_top = 18.0
-offset_right = 136.0
-offset_bottom = 58.0
-texture_normal = ExtResource("17_bn")
-texture_pressed = ExtResource("19_bp")
-texture_hover = ExtResource("18_bh")
+offset_right = 114.0
+offset_bottom = 60.0
 stretch_mode = 0
 
 [node name="BtnCodex" type="TextureButton" parent="UI/HUD" unique_id=1172246896]
 layout_mode = 0
-offset_left = 40.0
-offset_top = 66.0
-offset_right = 136.0
-offset_bottom = 106.0
-texture_normal = ExtResource("20_cn")
-texture_pressed = ExtResource("22_cp")
-texture_hover = ExtResource("21_ch")
+offset_left = 20.0
+offset_top = 420.0
+offset_right = 108.0
+offset_bottom = 508.0
 stretch_mode = 0
 
 [node name="BtnNear" type="TextureButton" parent="UI/HUD" unique_id=167553721]
 layout_mode = 0
-offset_left = 36.0
-offset_top = 300.0
-offset_right = 120.0
-offset_bottom = 344.0
-texture_normal = ExtResource("23_nn")
-texture_pressed = ExtResource("25_np")
-texture_hover = ExtResource("24_nh")
+offset_left = 20.0
+offset_top = 100.0
+offset_right = 108.0
+offset_bottom = 188.0
 stretch_mode = 0
 
 [node name="BtnMid" type="TextureButton" parent="UI/HUD" unique_id=75303039]
 layout_mode = 0
-offset_left = 36.0
-offset_top = 352.0
-offset_right = 120.0
-offset_bottom = 396.0
-texture_normal = ExtResource("26_mn")
-texture_pressed = ExtResource("28_mp")
-texture_hover = ExtResource("27_mh")
+offset_left = 20.0
+offset_top = 206.0
+offset_right = 108.0
+offset_bottom = 294.0
 stretch_mode = 0
 
 [node name="BtnFar" type="TextureButton" parent="UI/HUD" unique_id=2298080]
 layout_mode = 0
-offset_left = 36.0
-offset_top = 404.0
-offset_right = 204.0
-offset_bottom = 492.0
-texture_normal = ExtResource("29_fn")
-texture_pressed = ExtResource("31_fp")
-texture_hover = ExtResource("30_fh")
+offset_left = 20.0
+offset_top = 312.0
+offset_right = 108.0
+offset_bottom = 400.0
 stretch_mode = 0
 
-[node name="BtnClock" type="TextureButton" parent="UI/HUD" unique_id=1555892840]
+[node name="BtnLeftToggle" type="TextureButton" parent="UI/HUD" unique_id=1555892841]
 layout_mode = 0
-offset_left = 1156.0
-offset_top = 16.0
-offset_right = 1240.0
-offset_bottom = 100.0
-texture_normal = ExtResource("32_kln")
-texture_pressed = ExtResource("32_kln")
-texture_hover = ExtResource("33_klh")
+offset_left = 14.0
+offset_top = 560.0
+offset_right = 114.0
+offset_bottom = 600.0
+stretch_mode = 0
+
+[node name="BtnTimelineToggle" type="TextureButton" parent="UI/HUD" unique_id=1555892842]
+layout_mode = 0
+offset_left = 560.0
+offset_top = 614.0
+offset_right = 720.0
+offset_bottom = 640.0
 stretch_mode = 0
 
 [node name="Overlay" type="Control" parent="UI" unique_id=1012087800]
@@ -461,4 +511,5 @@ script = ExtResource("3_ui")
 [connection signal="pressed" from="UI/HUD/BtnNear" to="UI/Overlay" method="_on_near_pressed"]
 [connection signal="pressed" from="UI/HUD/BtnMid" to="UI/Overlay" method="_on_mid_pressed"]
 [connection signal="pressed" from="UI/HUD/BtnFar" to="UI/Overlay" method="_on_far_pressed"]
-[connection signal="pressed" from="UI/HUD/BtnClock" to="UI/Overlay" method="_on_clock_pressed"]
+[connection signal="pressed" from="UI/HUD/BtnLeftToggle" to="UI/Overlay" method="_on_left_toggle_pressed"]
+[connection signal="pressed" from="UI/HUD/BtnTimelineToggle" to="UI/Overlay" method="_on_timeline_toggle_pressed"]

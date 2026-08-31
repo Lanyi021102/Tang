@@ -7,12 +7,13 @@ const MENU_SCENE := "res://scenes/MainMenu.tscn"
 const UI_SCRIPT := preload("res://scenes/ui_overlay.gd")
 const FANG_DIR := "res://assets/fang/"
 
-const CLOCK_RECT := Rect2(1156.0, 16.0, 84.0, 84.0)
-const GROUP_CHAT_RECT := Rect2(940.0, 120.0, 300.0, 380.0)
-const BUILDING_PANEL_RECT := Rect2(900.0, 100.0, 340.0, 480.0)
-const HIST_TIMELINE_RECT := Rect2(180.0, 652.0, 920.0, 54.0)
+const GROUP_CHAT_RECT := Rect2(138.0, 128.0, 348.0, 430.0)
+const BUILDING_PANEL_RECT := Rect2(884.0, 199.0, 360.0, 385.0)
+const HIST_TIMELINE_RECT := Rect2(88.0, 648.0, 1104.0, 50.0)
 const HIST_YEAR_MIN := 582
 const HIST_YEAR_MAX := 907
+# 右上角时间指示区域（地平线 + 太阳月亮）点击可切换时辰
+const TIME_AREA_RECT := Rect2(1112.0, 18.0, 166.0, 108.0)
 const SHICHEN := ["子时", "丑时", "寅时", "卯时", "辰时", "巳时", "午时", "未时", "申时", "酉时", "戌时", "亥时"]
 const CODEX_CATS := ["衣食住行", "建筑与城市规划", "历史"]
 
@@ -47,11 +48,12 @@ var _typing_visible := 0
 var _type_accum := 0.0
 var _type_speed := 45.0
 var _pending_intro := false
-var _fang_outline := PackedVector2Array()
-var _hover_outline := PackedVector2Array()
+var _fang_outline := PackedVector2Array()      # 选中坊描边（世界坐标）
+var _hover_outline := PackedVector2Array()     # 悬停坊描边（世界坐标）
 var _time_of_day := 10.0
 var _target_hour := 10.0
 var _current_year := 740
+var _year_display := 740.0  # 时间轴大圆滑动显示用（平滑插值到 _current_year）
 var _timeline: Array = []
 var _clock_open := false
 var _hist_open := false
@@ -59,6 +61,12 @@ var _hist_scroll := 0.0
 var _year_anim := false
 var _year_anim_t := 0.0
 var _year_to := 740
+var _year_dir := 1.0            # 年份跳转时太阳月亮转动方向：未来顺时针(+1)、过去逆时针(-1)
+var _time_anim_active := false  # 时辰切换平滑推进（始终顺时针）
+var _time_anim_from := 10.0
+var _time_anim_to := 10.0
+var _time_anim_t := 0.0
+var _time_anim_dur := 1.0
 var _ambient: CanvasModulate
 var _bg: TextureRect
 var _day_lights: Array = []
@@ -98,12 +106,14 @@ var _codex_kb: Dictionary = {}
 var _codex_collected: Dictionary = {}
 var _codex_open := false
 var _codex_cat := 0
+var _codex_focus := 0
 var _codex_scroll := 0.0
 
 var _ui
 var _world
 var _npcs_node
 var _markers_node
+var _outline_layer
 
 # camera zoom state
 const ZOOM_LEVELS := [1.2, 3.2, 40.0]
@@ -116,6 +126,67 @@ var _free_pan := false
 var _dragging := false
 var _drag_start := Vector2.ZERO
 var _moved := false
+
+# 左侧功能栏收起/展开状态
+var _left_bar_collapsed := false
+const LEFT_BAR_EXPANDED_W := 128.0
+const LEFT_BAR_COLLAPSED_W := 44.0
+
+# 底部时间轴收起/展开状态
+var _timeline_collapsed := false
+
+# 时间轴收起/展开切换按钮区域（展开按钮在底部窄条中央；收起按钮在时间轴上方中央，两者同尺寸同视觉）
+func timeline_toggle_rect() -> Rect2:
+	if _timeline_collapsed:
+		return Rect2(560.0, 694.0, 160.0, 26.0)
+	return Rect2(560.0, 614.0, 160.0, 26.0)
+
+func toggle_timeline() -> void:
+	_timeline_collapsed = not _timeline_collapsed
+	_sync_hud_guards()
+	if _ui:
+		_ui.queue_redraw()
+# 收起/展开切换按钮区域（左下角）
+func left_bar_rect() -> Rect2:
+	var w := LEFT_BAR_EXPANDED_W if not _left_bar_collapsed else LEFT_BAR_COLLAPSED_W
+	return Rect2(0.0, 0.0, w, 648.0)
+
+func left_toggle_rect() -> Rect2:
+	if _left_bar_collapsed:
+		return Rect2(6.0, 560.0, 32.0, 44.0)
+	return Rect2(14.0, 560.0, 100.0, 40.0)
+
+func toggle_left_bar() -> void:
+	_left_bar_collapsed = not _left_bar_collapsed
+	_sync_hud_guards()
+	if _ui:
+		_ui.queue_redraw()
+
+# 同步 HUD 中左侧拦截条宽度与底部栏，收起时让出地图区域；收起时隐藏对应按钮
+func _sync_hud_guards() -> void:
+	var w := LEFT_BAR_EXPANDED_W if not _left_bar_collapsed else LEFT_BAR_COLLAPSED_W
+	var hud := get_node_or_null("UI/HUD")
+	if hud == null:
+		return
+	var left_band = hud.get_node_or_null("LeftOpaqueBand")
+	if left_band:
+		left_band.offset_right = w
+	var left_guard = hud.get_node_or_null("LeftGuard")
+	if left_guard:
+		left_guard.offset_right = w
+	var show := not _left_bar_collapsed
+	for n in ["BtnBack", "BtnNear", "BtnMid", "BtnFar", "BtnCodex"]:
+		var btn = hud.get_node_or_null(n)
+		if btn:
+			btn.visible = show
+	# 时间轴收起：底部深色带收窄为窄条（30px 高），仍保留展开按钮背景
+	var bottom_band = hud.get_node_or_null("BottomOpaqueBand")
+	if bottom_band:
+		bottom_band.offset_top = 690.0 if _timeline_collapsed else 602.0
+	for n in ["BottomUpperGuard", "BottomLeftGuard", "BottomRightGuard", "BottomLowerGuard"]:
+		var g = hud.get_node_or_null(n)
+		if g:
+			g.visible = not _timeline_collapsed
 
 # grid -> iso
 func _iso(c: float, r: float) -> Vector2:
@@ -130,6 +201,7 @@ func _ready() -> void:
 	_build_world()
 	_build_ui()
 	_init_npcs()
+	_sync_hud_guards()
 	NetworkManager.chat_response.connect(_on_chat_response)
 	_set_zoom(1, true)
 	_redraw_world()
@@ -154,6 +226,7 @@ func _sync_from_data() -> void:
 		_codex_collected[cat] = []
 	GameManager.current_year = _current_year
 	GameManager.time_of_day = _time_of_day
+	_year_display = float(_current_year)
 
 func _build_fangs() -> void:
 	_fang_tex.clear()
@@ -216,10 +289,13 @@ func _build_world() -> void:
 	_world.map = self
 	_npcs_node = get_node_or_null("World/NPCs")
 	_markers_node = get_node_or_null("World/Markers")
+	_outline_layer = get_node_or_null("World/OutlineLayer")
 	for layer in ["NPCs", "Markers"]:
 		var n = get_node_or_null("World/" + layer)
 		if n:
 			n.map = self
+	if _outline_layer:
+		_outline_layer.map = self
 	var buildings = get_node_or_null("World/Buildings")
 	if buildings:
 		for b in buildings.get_children():
@@ -305,6 +381,12 @@ func _update_fang_outline() -> void:
 	if _hover_fang.x >= 0 and _hover_fang != _selected_fang:
 		_hover_outline = _outline_for(_hover_fang)
 	_ui.queue_redraw()
+	_refresh_outline_layer()
+
+# 刷新描边层重绘
+func _refresh_outline_layer() -> void:
+	if _outline_layer:
+		_outline_layer.queue_redraw()
 
 func _outline_for(cell: Vector2) -> PackedVector2Array:
 	if cell.x < 0:
@@ -319,38 +401,89 @@ func _outline_for(cell: Vector2) -> PackedVector2Array:
 	])
 	var out := PackedVector2Array()
 	for p in corners:
-		out.append(_world_to_screen(p))
-	out.append(_world_to_screen(corners[0]))
+		out.append(p)
+	out.append(corners[0])
 	return out
 
 func set_time(hour: float, smooth := false) -> void:
-	_target_hour = clampf(hour, 0.0, 24.0)
+	var target := clampf(hour, 0.0, 24.0)
+	_target_hour = target
+	if _year_anim:
+		# 手动调时打断年份跳转动画：年份落定，时钟归用户控制
+		_year_anim = false
+		_current_year = _year_to
+		_year_display = float(_current_year)
+		GameManager.set_year(_current_year)
 	if not smooth:
-		_time_of_day = _target_hour
+		_time_of_day = target
+		_time_anim_active = false
+	else:
+		var from := _time_of_day
+		if shichen_index(target) == shichen_index(from):
+			# 点击当前时辰：直接到位，不空转
+			_time_of_day = target
+			_time_anim_active = false
+		else:
+			# 始终顺时针推进：目标不早于当前时刻，必要时绕一圈（+24h）
+			var to := target
+			if to <= from:
+				to += 24.0
+			_time_anim_from = from
+			_time_anim_to = to
+			_time_anim_t = 0.0
+			_time_anim_dur = maxf(0.5, (to - from) / 24.0 * 2.0)  # 全圈约2秒
+			_time_anim_active = true
 	GameManager.set_time(_target_hour)
 	_ui.queue_redraw()
 
 func _update_time(delta: float) -> void:
 	if _year_anim:
 		_year_anim_t += delta
-		_time_of_day = fmod(_time_of_day + delta * 26.0, 24.0)
+		# 时钟转动方向跟随目标年份：未来顺时针、过去逆时针
+		_time_of_day = fposmod(_time_of_day + delta * 26.0 * _year_dir, 24.0)
+		# 时钟转动的同时，时间轴大圆同步滑向目标年份
+		_year_display = lerpf(_year_display, float(_year_to), delta * 5.0)
 		if _year_anim_t >= 1.5:
 			_year_anim = false
 			_current_year = _year_to
+			_year_display = float(_current_year)
 			_time_of_day = _target_hour
 			GameManager.set_year(_current_year)
 			GameManager.set_time(_time_of_day)
 			_ui.queue_redraw()
+	elif _time_anim_active:
+		_time_anim_t += delta
+		var t := clampf(_time_anim_t / _time_anim_dur, 0.0, 1.0)
+		var e := _ease_in_out_cubic(t)
+		_time_of_day = fposmod(lerpf(_time_anim_from, _time_anim_to, e), 24.0)
+		_ui.queue_redraw()
+		if t >= 1.0:
+			_time_anim_active = false
+			_time_of_day = fposmod(_time_anim_to, 24.0)
 	elif absf(_time_of_day - _target_hour) > 0.02:
 		_time_of_day = lerpf(_time_of_day, _target_hour, delta * 4.0)
+		_ui.queue_redraw()
+	else:
+		_time_of_day = _target_hour
+	# 非动画状态（如直接点击时间轴事件点）：大圆平滑滑动到目标年份
+	if not _year_anim and absf(_year_display - float(_current_year)) > 0.05:
+		_year_display = lerpf(_year_display, float(_current_year), delta * 5.0)
+		if absf(_year_display - float(_current_year)) <= 0.05:
+			_year_display = float(_current_year)
 		_ui.queue_redraw()
 
 func _jump_to_year(year: int) -> void:
 	_year_to = clampi(year, HIST_YEAR_MIN, HIST_YEAR_MAX)
+	# 过去（更早年份）：太阳月亮逆时针转；未来（更晚年份）：顺时针转
+	_year_dir = -1.0 if _year_to < _current_year else 1.0
 	_year_anim = true
 	_year_anim_t = 0.0
-	_hist_open = false
+	_time_anim_active = false
 	_ui.queue_redraw()
+
+# 时间轴大圆当前显示年份（平滑插值中）
+func display_year() -> float:
+	return _year_display
 
 func shichen_index(hour: float) -> int:
 	return (int(hour) % 24) / 2
@@ -373,7 +506,11 @@ func nearby_event_title(year: int) -> String:
 	return best
 
 func clock_popup_rect() -> Rect2:
-	return Rect2(1128.0, 108.0, 132.0, SHICHEN.size() * 26.0 + 14.0)
+	return Rect2(1124.0, 132.0, 132.0, SHICHEN.size() * 26.0 + 14.0)
+
+func shichen_rect(i: int) -> Rect2:
+	var pr := clock_popup_rect()
+	return Rect2(pr.position.x + 8.0, pr.position.y + 10.0 + float(i) * 26.0, pr.size.x - 16.0, 22.0)
 
 func group_chat_close_rect() -> Rect2:
 	return Rect2(GROUP_CHAT_RECT.end.x - 34.0, GROUP_CHAT_RECT.position.y + 7.0, 24.0, 24.0)
@@ -387,28 +524,65 @@ func followup_button_rect(i: int) -> Rect2:
 	var bw := (BUILDING_PANEL_RECT.size.x - 28.0 - 16.0) / 3.0
 	return Rect2(bx + float(i) * (bw + 8.0), by, bw, 44.0)
 
-func shichen_rect(i: int) -> Rect2:
-	var pr := clock_popup_rect()
-	return Rect2(pr.position.x + 8.0, pr.position.y + 10.0 + float(i) * 26.0, pr.size.x - 16.0, 22.0)
-
 func hist_popup_rect() -> Rect2:
-	return Rect2(360.0, 100.0, 560.0, 520.0)
+	return Rect2(356.0, 70.0, 568.0, 500.0)
 
 func hist_event_rect(i: int) -> Rect2:
 	var pr := hist_popup_rect()
 	return Rect2(pr.position.x + 16.0, pr.position.y + 56.0 + float(i) * 44.0 - _hist_scroll, pr.size.x - 32.0, 40.0)
 
+# 大事记列表最大滚动量（保证最后一项不滚出可视区）
+func hist_max_scroll() -> float:
+	var pr := hist_popup_rect()
+	var list_h := pr.size.y - 56.0 - 12.0
+	var content_h := float(_timeline.size()) * 44.0
+	return maxf(0.0, content_h - list_h)
+
+# 时间轴某事件点在屏幕上的位置（与 ui_overlay._draw_hist_timeline 的 bar 计算一致）
+func timeline_event_screen_pos(i: int) -> Vector2:
+	var r: Rect2 = HIST_TIMELINE_RECT
+	var bar := Rect2(r.position.x + 18.0, r.position.y + 18.0, r.size.x - 36.0, 6.0)
+	var t := (float(_timeline[i]["year"]) - float(HIST_YEAR_MIN)) / float(HIST_YEAR_MAX - HIST_YEAR_MIN)
+	return Vector2(bar.position.x + t * bar.size.x, bar.get_center().y)
+
+# 根据屏幕 x 坐标找到最近的事件点索引（容差约 14px），找不到返回 -1
+func timeline_event_at_x(x: float) -> int:
+	var best := -1
+	var best_dist := 14.0
+	for i in range(_timeline.size()):
+		var d := absf(timeline_event_screen_pos(i).x - x)
+		if d < best_dist:
+			best_dist = d
+			best = i
+	return best
+
 func codex_panel_rect() -> Rect2:
-	return Rect2(300.0, 90.0, 680.0, 540.0)
+	var vp := get_viewport_rect()
+	var w := 480.0
+	var h := 500.0
+	return Rect2((vp.size.x - w) * 0.5, 70.0, w, h)
 
 func codex_cat_rect(i: int) -> Rect2:
 	var pr := codex_panel_rect()
-	var w := (pr.size.x - 40.0) / 3.0
-	return Rect2(pr.position.x + 16.0 + float(i) * w, pr.position.y + 52.0, w - 8.0, 36.0)
+	var w := (pr.size.x - 48.0) / 3.0
+	return Rect2(pr.position.x + 18.0 + float(i) * w, pr.position.y + 70.0, w - 7.0, 34.0)
 
 func codex_entry_rect(i: int) -> Rect2:
 	var pr := codex_panel_rect()
-	return Rect2(pr.position.x + 20.0, pr.position.y + 104.0 + float(i) * 46.0 - _codex_scroll, pr.size.x - 40.0, 42.0)
+	return Rect2(pr.position.x + 20.0, pr.position.y + 120.0 + float(i) * 52.0 - _codex_scroll, pr.size.x - 40.0, 46.0)
+
+func codex_detail_rect() -> Rect2:
+	var pr := codex_panel_rect()
+	return Rect2(pr.position.x + 20.0, pr.position.y + 326.0, pr.size.x - 40.0, pr.size.y - 346.0)
+
+# 图鉴条目列表最大滚动量（保证最后一项不滚出可视区）
+func codex_max_scroll() -> float:
+	var pr := codex_panel_rect()
+	var detail_rect := codex_detail_rect()
+	var list_top: float = pr.position.y + 116.0
+	var list_h := detail_rect.position.y - 8.0 - list_top
+	var content_h := float(codex_entries(_codex_cat).size()) * 52.0
+	return maxf(0.0, content_h - list_h)
 
 func codex_collected_count(cat: int) -> int:
 	if cat < 0 or cat >= CODEX_CATS.size():
@@ -427,6 +601,32 @@ func codex_collected_list(cat: int) -> Array:
 	if cat < 0 or cat >= CODEX_CATS.size():
 		return []
 	return _codex_collected.get(CODEX_CATS[cat], [])
+
+func _is_screen_ui_band(p: Vector2) -> bool:
+	var vp := get_viewport_rect()
+	var w := LEFT_BAR_EXPANDED_W if not _left_bar_collapsed else LEFT_BAR_COLLAPSED_W
+	if p.x <= w:
+		return true
+	if not _timeline_collapsed and p.y >= vp.size.y - 118.0:
+		return true
+	return false
+
+func _is_blocked_screen_ui_band(p: Vector2) -> bool:
+	return _is_screen_ui_band(p) and not HIST_TIMELINE_RECT.has_point(p)
+
+# 知识卡片展开时，其面板区域应拦截对背景地图的点击（但面板内的关闭/追问按钮仍可点）
+func _is_panel_blocking(p: Vector2) -> bool:
+	if _selected.is_empty():
+		return false
+	if not BUILDING_PANEL_RECT.has_point(p):
+		return false
+	# 关闭按钮与追问按钮区域不拦截，让事件继续进入 _handle_click 处理
+	if building_close_rect().has_point(p):
+		return false
+	for i in range(3):
+		if followup_button_rect(i).has_point(p):
+			return false
+	return true
 
 func _ambient_color(hour: float) -> Color:
 	for i in range(_day_hours.size() - 1):
@@ -596,11 +796,25 @@ func _update_group_chat(delta: float) -> void:
 
 func _update_hover() -> void:
 	var mp := get_viewport().get_mouse_position()
-	var world := _camera.get_canvas_transform().affine_inverse() * mp
-	var f := _fang_at(world)
+	var f := Vector2(-1, -1)
+	if not _is_pointer_on_ui(mp):
+		var world := _camera.get_canvas_transform().affine_inverse() * mp
+		f = _fang_at(world)
 	if f != _hover_fang:
 		_hover_fang = f
 		_ui.queue_redraw()
+
+# 鼠标是否悬停在任何 UI（按钮/面板/时间轴/底部栏）之上：此时不触发地图坊 hover
+func _is_pointer_on_ui(p: Vector2) -> bool:
+	if _is_blocked_screen_ui_band(p):
+		return true
+	if TIME_AREA_RECT.has_point(p):
+		return true
+	if HIST_TIMELINE_RECT.has_point(p) and not _timeline_collapsed:
+		return true
+	if _ui != null and _ui._detect_ui_hover() != "":
+		return true
+	return false
 
 # ==================== world drawing (moved to world.gd) ====================
 
@@ -644,26 +858,38 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif _panel_has_point(wmb.position):
 				_chat_scroll = maxf(0.0, _chat_scroll - 40.0)
 				_ui.queue_redraw()
+			elif _is_screen_ui_band(wmb.position):
+				return
 			else:
 				_set_zoom(_zoom_idx + 1)
 			return
 		if event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
 			var wmb2 := event as InputEventMouseButton
 			if _codex_open and codex_panel_rect().has_point(wmb2.position):
-				_codex_scroll += 40.0
+				_codex_scroll = minf(_codex_scroll + 40.0, codex_max_scroll())
 				_ui.queue_redraw()
 			elif _hist_open and hist_popup_rect().has_point(wmb2.position):
-				_hist_scroll += 40.0
+				_hist_scroll = minf(_hist_scroll + 40.0, hist_max_scroll())
 				_ui.queue_redraw()
 			elif _panel_has_point(wmb2.position):
 				_chat_scroll += 40.0
 				_ui.queue_redraw()
+			elif _is_screen_ui_band(wmb2.position):
+				return
 			else:
 				_set_zoom(_zoom_idx - 1)
 			return
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			var mb := event as InputEventMouseButton
 			if mb.pressed:
+				if left_toggle_rect().has_point(mb.position):
+					toggle_left_bar()
+					return
+				if _is_screen_ui_band(mb.position) or _is_panel_blocking(mb.position):
+					_dragging = false
+					_moved = false
+					_drag_start = mb.position
+					return
 				_dragging = true
 				_drag_start = mb.position
 				_moved = false
@@ -689,14 +915,28 @@ func _panel_has_point(p: Vector2) -> bool:
 	return BUILDING_PANEL_RECT.has_point(p)
 
 func _handle_click(screen_pos: Vector2) -> void:
+	if left_toggle_rect().has_point(screen_pos):
+		toggle_left_bar()
+		return
 	if _clock_open:
-		_clock_open = false
-		_ui.queue_redraw()
+		# 时辰选择弹窗打开时：点时辰项切换时间，点弹窗外关闭
+		var was_open := _clock_open
 		if clock_popup_rect().has_point(screen_pos):
 			for i in range(SHICHEN.size()):
 				if shichen_rect(i).has_point(screen_pos):
 					set_time(float(i * 2), true)
+					_clock_open = false
+					_ui.queue_redraw()
 					return
+			return
+		_clock_open = false
+		_ui.queue_redraw()
+		return
+	if TIME_AREA_RECT.has_point(screen_pos):
+		# 点击时间指示区域：弹出时辰选择卡片
+		_clock_open = true
+		_hist_open = false
+		_ui.queue_redraw()
 		return
 	if _hist_open:
 		_hist_open = false
@@ -709,10 +949,24 @@ func _handle_click(screen_pos: Vector2) -> void:
 		return
 	if _codex_open:
 		if codex_panel_rect().has_point(screen_pos):
+			# 关闭按钮
+			var pr: Rect2 = codex_panel_rect()
+			var close_r := Rect2(pr.end.x - 44.0, pr.position.y + 12.0, 28.0, 28.0)
+			if close_r.has_point(screen_pos):
+				_codex_open = false
+				_ui.queue_redraw()
+				return
 			for i in range(3):
 				if codex_cat_rect(i).has_point(screen_pos):
 					_codex_cat = i
+					_codex_focus = 0
 					_codex_scroll = 0.0
+					_ui.queue_redraw()
+					return
+			var entries := codex_entries(_codex_cat)
+			for i in range(entries.size()):
+				if codex_entry_rect(i).has_point(screen_pos):
+					_codex_focus = i
 					_ui.queue_redraw()
 					return
 			return
@@ -720,10 +974,20 @@ func _handle_click(screen_pos: Vector2) -> void:
 		_ui.queue_redraw()
 		return
 	if HIST_TIMELINE_RECT.has_point(screen_pos):
+		if _timeline_collapsed:
+			return
+		# 点击时间轴：先打开大事记卡片，再按事件点滚动定位并跳转年份
 		_hist_open = true
-		_clock_open = false
+		var ev_idx := timeline_event_at_x(screen_pos.x)
+		if ev_idx >= 0:
+			# 点击具体大事记点：滚动定位 + 年份动画跳转（时钟/日月实时流转 + 大圆滑动）
+			_hist_scroll = maxf(0.0, float(ev_idx) * 44.0 - 6.0)
+			_jump_to_year(int(_timeline[ev_idx]["year"]))
+			return
 		_hist_scroll = 0.0
 		_ui.queue_redraw()
+		return
+	if _is_blocked_screen_ui_band(screen_pos):
 		return
 	if _group_chat_open and group_chat_close_rect().has_point(screen_pos):
 		_group_chat_open = false
