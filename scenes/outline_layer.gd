@@ -14,8 +14,9 @@ func _draw() -> void:
 		for i in range(map._hover_outline.size() - 1):
 			draw_line(map._hover_outline[i], map._hover_outline[i + 1], Color(0.02, 0.03, 0.025, 0.45), 5.0)
 			draw_line(map._hover_outline[i], map._hover_outline[i + 1], Color(0.95, 0.78, 0.36, 0.58), 2.0)
-	# 选中描边
-	if map._fang_outline.size() >= 2:
+	# 选中描边（非线性揭示动画：从无到有缓慢淡出金边）
+	var reveal: float = map.outline_reveal()
+	if map._fang_outline.size() >= 2 and reveal > 0.001:
 		for i in range(map._fang_outline.size() - 1):
-			draw_line(map._fang_outline[i], map._fang_outline[i + 1], Color(0.02, 0.03, 0.025, 0.78), 7.0)
-			draw_line(map._fang_outline[i], map._fang_outline[i + 1], Color(0.97, 0.83, 0.46, 0.94), 3.0)
+			draw_line(map._fang_outline[i], map._fang_outline[i + 1], Color(0.02, 0.03, 0.025, 0.78 * reveal), 7.0)
+			draw_line(map._fang_outline[i], map._fang_outline[i + 1], Color(0.97, 0.83, 0.46, 0.94 * reveal), 3.0)

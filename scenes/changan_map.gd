@@ -67,6 +67,11 @@ var _time_anim_from := 10.0
 var _time_anim_to := 10.0
 var _time_anim_t := 0.0
 var _time_anim_dur := 1.0
+var _left_bar_anim := 1.0            # 左侧功能栏动画：1=展开, 0=收起
+var _left_bar_anim_target := 1.0
+var _clock_popup_anim := 0.0         # 时辰弹窗下移动画：0=收起, 1=展开
+var _clock_popup_anim_target := 0.0
+var _year_time_from := 10.0          # 年份跳转时时钟起始时刻（用于非线性过渡）
 var _ambient: CanvasModulate
 var _bg: TextureRect
 var _day_lights: Array = []
@@ -107,6 +112,10 @@ var _codex_collected: Dictionary = {}
 var _codex_open := false
 var _codex_cat := 0
 var _codex_focus := 0
+var _codex_focus_anim := 0.0   # 焦点卡片滑动动画（非线性，向 _codex_focus 逼近）
+var _codex_dragging := false    # 正在拖拽滑动图鉴卡片
+var _codex_drag_x := 0.0
+var _codex_drag_focus := 0.0
 var _codex_scroll := 0.0
 
 var _ui
@@ -134,6 +143,13 @@ const LEFT_BAR_COLLAPSED_W := 44.0
 
 # 底部时间轴收起/展开状态
 var _timeline_collapsed := false
+# 时间轴收起/展开动画插值：0=收起, 1=展开（非线性，每帧向目标逼近）
+var _timeline_anim := 1.0
+var _timeline_anim_target := 1.0
+# 选中坊描边揭示动画进度：0=无, 1=完全显示（非线性）
+var _outline_progress := 0.0
+var _outline_target := 0.0
+var _prev_fang := Vector2(-1, -1)
 
 # 时间轴收起/展开切换按钮区域（展开按钮在底部窄条中央；收起按钮在时间轴上方中央，两者同尺寸同视觉）
 func timeline_toggle_rect() -> Rect2:
@@ -143,7 +159,7 @@ func timeline_toggle_rect() -> Rect2:
 
 func toggle_timeline() -> void:
 	_timeline_collapsed = not _timeline_collapsed
-	_sync_hud_guards()
+	_timeline_anim_target = 0.0 if _timeline_collapsed else 1.0
 	if _ui:
 		_ui.queue_redraw()
 # 收起/展开切换按钮区域（左下角）
@@ -158,13 +174,14 @@ func left_toggle_rect() -> Rect2:
 
 func toggle_left_bar() -> void:
 	_left_bar_collapsed = not _left_bar_collapsed
-	_sync_hud_guards()
+	_left_bar_anim_target = 0.0 if _left_bar_collapsed else 1.0
 	if _ui:
 		_ui.queue_redraw()
 
 # 同步 HUD 中左侧拦截条宽度与底部栏，收起时让出地图区域；收起时隐藏对应按钮
 func _sync_hud_guards() -> void:
-	var w := LEFT_BAR_EXPANDED_W if not _left_bar_collapsed else LEFT_BAR_COLLAPSED_W
+	var le := _ease_in_out_cubic(clampf(_left_bar_anim, 0.0, 1.0))
+	var w := lerpf(LEFT_BAR_EXPANDED_W, LEFT_BAR_COLLAPSED_W, 1.0 - le)
 	var hud := get_node_or_null("UI/HUD")
 	if hud == null:
 		return
@@ -174,19 +191,25 @@ func _sync_hud_guards() -> void:
 	var left_guard = hud.get_node_or_null("LeftGuard")
 	if left_guard:
 		left_guard.offset_right = w
-	var show := not _left_bar_collapsed
+	var show := le > 0.5
 	for n in ["BtnBack", "BtnNear", "BtnMid", "BtnFar", "BtnCodex"]:
 		var btn = hud.get_node_or_null(n)
 		if btn:
 			btn.visible = show
-	# 时间轴收起：底部深色带收窄为窄条（30px 高），仍保留展开按钮背景
+			if btn is CanvasItem:
+				btn.modulate.a = clampf(le, 0.0, 1.0)
+	# 时间轴收起：底部深色带随动画收窄/展开，并淡出对应守卫条
 	var bottom_band = hud.get_node_or_null("BottomOpaqueBand")
 	if bottom_band:
-		bottom_band.offset_top = 690.0 if _timeline_collapsed else 602.0
+		var e := _ease_in_out_cubic(clampf(_timeline_anim, 0.0, 1.0))
+		bottom_band.offset_top = lerpf(690.0, 602.0, e)
+	var show_g := _timeline_anim > 0.05
 	for n in ["BottomUpperGuard", "BottomLeftGuard", "BottomRightGuard", "BottomLowerGuard"]:
 		var g = hud.get_node_or_null(n)
 		if g:
-			g.visible = not _timeline_collapsed
+			g.visible = show_g
+			if g is CanvasItem:
+				g.modulate.a = clampf(_timeline_anim, 0.0, 1.0)
 
 # grid -> iso
 func _iso(c: float, r: float) -> Vector2:
@@ -208,7 +231,7 @@ func _ready() -> void:
 
 func _setup_fonts() -> void:
 	var kf := SystemFont.new()
-	kf.font_names = PackedStringArray(["Kaiti SC", "Kaiti", "STKaiti", "KaiTi", "Songti SC", "STHeiti", "PingFang SC"])
+	kf.font_names = PackedStringArray(["QIJIFALLBACK", "Kaiti SC", "Kaiti", "STKaiti", "KaiTi", "Songti SC", "STHeiti", "PingFang SC"])
 	kf.allow_system_fallback = true
 	font_song = kf
 	font_hei = kf
@@ -380,8 +403,39 @@ func _update_fang_outline() -> void:
 	_hover_outline = PackedVector2Array()
 	if _hover_fang.x >= 0 and _hover_fang != _selected_fang:
 		_hover_outline = _outline_for(_hover_fang)
+	if _selected_fang != _prev_fang:
+		_prev_fang = _selected_fang
+		if _selected_fang.x >= 0:
+			_outline_progress = 0.0
+			_outline_target = 1.0
+		else:
+			_outline_target = 0.0
 	_ui.queue_redraw()
 	_refresh_outline_layer()
+
+# 更新时间轴收起/展开动画与选中描边动画（非线性）
+func _update_ui_anims(delta: float) -> void:
+	if absf(_timeline_anim - _timeline_anim_target) > 0.0005:
+		_timeline_anim = lerpf(_timeline_anim, _timeline_anim_target, delta * 7.0)
+		_sync_hud_guards()
+		if _ui:
+			_ui.queue_redraw()
+	if absf(_left_bar_anim - _left_bar_anim_target) > 0.0005:
+		_left_bar_anim = lerpf(_left_bar_anim, _left_bar_anim_target, delta * 8.0)
+		_sync_hud_guards()
+		if _ui:
+			_ui.queue_redraw()
+	if absf(_clock_popup_anim - _clock_popup_anim_target) > 0.0005:
+		_clock_popup_anim = lerpf(_clock_popup_anim, _clock_popup_anim_target, delta * 8.0)
+		if _ui:
+			_ui.queue_redraw()
+	if absf(_outline_progress - _outline_target) > 0.0005:
+		_outline_progress = lerpf(_outline_progress, _outline_target, delta * 6.0)
+		_refresh_outline_layer()
+
+# 选中描边揭示进度（已应用非线性缓动）
+func outline_reveal() -> float:
+	return _ease_in_out_cubic(clampf(_outline_progress, 0.0, 1.0))
 
 # 刷新描边层重绘
 func _refresh_outline_layer() -> void:
@@ -431,7 +485,7 @@ func set_time(hour: float, smooth := false) -> void:
 			_time_anim_from = from
 			_time_anim_to = to
 			_time_anim_t = 0.0
-			_time_anim_dur = maxf(0.5, (to - from) / 24.0 * 2.0)  # 全圈约2秒
+			_time_anim_dur = maxf(0.9, (to - from) / 24.0 * 3.0)  # 全圈约3秒，非线性缓动
 			_time_anim_active = true
 	GameManager.set_time(_target_hour)
 	_ui.queue_redraw()
@@ -439,8 +493,10 @@ func set_time(hour: float, smooth := false) -> void:
 func _update_time(delta: float) -> void:
 	if _year_anim:
 		_year_anim_t += delta
-		# 时钟转动方向跟随目标年份：未来顺时针、过去逆时针
-		_time_of_day = fposmod(_time_of_day + delta * 26.0 * _year_dir, 24.0)
+		# 时钟随年份跳转做非线性过渡（和时辰切换一致），而非匀速转动
+		var t := clampf(_year_anim_t / 1.5, 0.0, 1.0)
+		var e := _ease_in_out_cubic(t)
+		_time_of_day = fposmod(_year_time_from + (fmod(_target_hour - _year_time_from, 24.0)) * e, 24.0)
 		# 时钟转动的同时，时间轴大圆同步滑向目标年份
 		_year_display = lerpf(_year_display, float(_year_to), delta * 5.0)
 		if _year_anim_t >= 1.5:
@@ -478,6 +534,7 @@ func _jump_to_year(year: int) -> void:
 	_year_dir = -1.0 if _year_to < _current_year else 1.0
 	_year_anim = true
 	_year_anim_t = 0.0
+	_year_time_from = _time_of_day
 	_time_anim_active = false
 	_ui.queue_redraw()
 
@@ -558,9 +615,9 @@ func timeline_event_at_x(x: float) -> int:
 
 func codex_panel_rect() -> Rect2:
 	var vp := get_viewport_rect()
-	var w := 480.0
-	var h := 500.0
-	return Rect2((vp.size.x - w) * 0.5, 70.0, w, h)
+	var w := 720.0
+	var h := 600.0
+	return Rect2((vp.size.x - w) * 0.5, 60.0, w, h)
 
 func codex_cat_rect(i: int) -> Rect2:
 	var pr := codex_panel_rect()
@@ -583,6 +640,46 @@ func codex_max_scroll() -> float:
 	var list_h := detail_rect.position.y - 8.0 - list_top
 	var content_h := float(codex_entries(_codex_cat).size()) * 52.0
 	return maxf(0.0, content_h - list_h)
+
+# ---- 图鉴知识卡片轮播 ----
+func codex_card_size() -> Vector2:
+	return Vector2(300.0, 450.0)  # 2:3 竖卡
+
+func codex_card_stride() -> float:
+	return codex_card_size().x + 28.0
+
+func codex_card_area() -> Rect2:
+	var pr := codex_panel_rect()
+	var top: float = pr.position.y + 132.0
+	return Rect2(pr.position.x + 10.0, top, pr.size.x - 20.0, pr.end.y - 16.0 - top)
+
+func codex_card_count() -> int:
+	return codex_entries(_codex_cat).size()
+
+# 焦点卡片滑动动画（非线性缓动）
+func _update_codex_carousel(delta: float) -> void:
+	var target := float(_codex_focus)
+	if not _codex_dragging:
+		_codex_focus_anim = lerpf(_codex_focus_anim, target, delta * 6.0)
+	else:
+		_codex_focus_anim = clampf(_codex_drag_focus, 0.0, maxf(0.0, float(codex_card_count() - 1)))
+
+# 给定屏幕坐标，返回命中的图鉴卡片索引（-1 为未命中）
+func codex_card_at(pos: Vector2) -> int:
+	var area := codex_card_area()
+	var csize := codex_card_size()
+	var stride := codex_card_stride()
+	var count := codex_card_count()
+	if count <= 0:
+		return -1
+	var center := Vector2(area.get_center().x, area.get_center().y)
+	for i in range(count):
+		var d := _codex_focus_anim - float(i)
+		var cx := center.x - d * stride
+		var card := Rect2(Vector2(cx - csize.x * 0.5, center.y - csize.y * 0.5), csize)
+		if card.has_point(pos):
+			return i
+	return -1
 
 func codex_collected_count(cat: int) -> int:
 	if cat < 0 or cat >= CODEX_CATS.size():
@@ -752,6 +849,8 @@ func _process(delta: float) -> void:
 	_update_group_chat(delta)
 	_update_hover()
 	_update_fang_outline()
+	_update_ui_anims(delta)
+	_update_codex_carousel(delta)
 	_update_time(delta)
 	_update_lighting()
 	_update_tilt_shift(delta)
@@ -850,7 +949,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
 			var wmb := event as InputEventMouseButton
 			if _codex_open and codex_panel_rect().has_point(wmb.position):
-				_codex_scroll = maxf(0.0, _codex_scroll - 40.0)
+				_codex_focus = clampi(_codex_focus - 1, 0, maxi(0, codex_card_count() - 1))
 				_ui.queue_redraw()
 			elif _hist_open and hist_popup_rect().has_point(wmb.position):
 				_hist_scroll = maxf(0.0, _hist_scroll - 40.0)
@@ -866,7 +965,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
 			var wmb2 := event as InputEventMouseButton
 			if _codex_open and codex_panel_rect().has_point(wmb2.position):
-				_codex_scroll = minf(_codex_scroll + 40.0, codex_max_scroll())
+				_codex_focus = clampi(_codex_focus + 1, 0, maxi(0, codex_card_count() - 1))
 				_ui.queue_redraw()
 			elif _hist_open and hist_popup_rect().has_point(wmb2.position):
 				_hist_scroll = minf(_hist_scroll + 40.0, hist_max_scroll())
@@ -885,6 +984,14 @@ func _unhandled_input(event: InputEvent) -> void:
 				if left_toggle_rect().has_point(mb.position):
 					toggle_left_bar()
 					return
+				if _codex_open and codex_card_area().has_point(mb.position) and codex_card_count() > 0:
+					# 图鉴知识卡片拖拽滑动
+					_codex_dragging = true
+					_codex_drag_focus = _codex_focus_anim
+					_codex_drag_x = mb.position.x
+					_dragging = false
+					_moved = false
+					return
 				if _is_screen_ui_band(mb.position) or _is_panel_blocking(mb.position):
 					_dragging = false
 					_moved = false
@@ -895,10 +1002,22 @@ func _unhandled_input(event: InputEvent) -> void:
 				_moved = false
 			else:
 				_dragging = false
+				if _codex_dragging:
+					_codex_dragging = false
+					_codex_focus = clampi(int(round(_codex_drag_focus)), 0, maxi(0, codex_card_count() - 1))
+					_ui.queue_redraw()
+					return
 				if not _moved:
 					_handle_click(mb.position)
 		return
 	if event is InputEventMouseMotion:
+		if _codex_dragging:
+			var mmd := event as InputEventMouseMotion
+			var stride: float = codex_card_stride()
+			if stride > 0.0:
+				_codex_drag_focus -= mmd.relative.x / stride
+			_ui.queue_redraw()
+			return
 		if _dragging:
 			var mm2 := event as InputEventMouseMotion
 			if mm2.position.distance_to(_drag_start) > 6.0:
@@ -926,15 +1045,19 @@ func _handle_click(screen_pos: Vector2) -> void:
 				if shichen_rect(i).has_point(screen_pos):
 					set_time(float(i * 2), true)
 					_clock_open = false
+					_clock_popup_anim_target = 0.0
 					_ui.queue_redraw()
 					return
 			return
 		_clock_open = false
+		_clock_popup_anim_target = 0.0
 		_ui.queue_redraw()
 		return
 	if TIME_AREA_RECT.has_point(screen_pos):
 		# 点击时间指示区域：弹出时辰选择卡片
 		_clock_open = true
+		_clock_popup_anim = 0.0
+		_clock_popup_anim_target = 1.0
 		_hist_open = false
 		_ui.queue_redraw()
 		return
@@ -963,12 +1086,11 @@ func _handle_click(screen_pos: Vector2) -> void:
 					_codex_scroll = 0.0
 					_ui.queue_redraw()
 					return
-			var entries := codex_entries(_codex_cat)
-			for i in range(entries.size()):
-				if codex_entry_rect(i).has_point(screen_pos):
-					_codex_focus = i
-					_ui.queue_redraw()
-					return
+			var ci := codex_card_at(screen_pos)
+			if ci >= 0:
+				_codex_focus = ci
+				_ui.queue_redraw()
+				return
 			return
 		_codex_open = false
 		_ui.queue_redraw()

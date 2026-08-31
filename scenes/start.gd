@@ -228,11 +228,11 @@ func _draw_walkers() -> void:
 
 func _setup_fonts() -> void:
 	var sf := SystemFont.new()
-	sf.font_names = PackedStringArray(["Songti SC", "Songti", "STSongti-SC-Regular", "STHeiti", "PingFang SC", "Heiti SC"])
+	sf.font_names = PackedStringArray(["QIJIFALLBACK", "Songti SC", "Songti", "STSongti-SC-Regular", "STHeiti", "PingFang SC", "Heiti SC"])
 	sf.allow_system_fallback = true
 	font_song = sf
 	var hf := SystemFont.new()
-	hf.font_names = PackedStringArray(["STHeiti", "PingFang SC", "Heiti SC"])
+	hf.font_names = PackedStringArray(["QIJIFALLBACK", "STHeiti", "PingFang SC", "Heiti SC"])
 	hf.allow_system_fallback = true
 	font_hei = hf
 
