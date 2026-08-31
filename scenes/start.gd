@@ -77,6 +77,21 @@ var _pressed_key := ""
 var _mouse_down := false
 var _redraw_accum := 0.0
 
+var _title_tex: Texture2D        # 标题横幅图（替换文字标题）
+var _title_alpha := 0.0          # 标题淡入进度（0→1）
+
+# 行走人物（地面层，按钮后面、建筑前面）
+const WALKER_DIR := "res://assets/characters/"
+const WALKER_NAMES := ["书生", "僧人", "儿童", "农夫", "商人", "士兵", "女人", "官员", "工匠", "老人"]
+const WALKER_FRAMES := 8
+const WALKER_H_MIN := 92.0      # 显示高度范围（设计像素）
+const WALKER_H_MAX := 122.0
+# 人物脚底 y 范围：最高与"退出"按钮上边缘对齐(552)，最低与"版本号"上边缘对齐(680)
+const WALKER_Y_TOP := BTN_QUIT.position.y
+const WALKER_Y_BOTTOM := VERSION_RECT.position.y
+const WALKER_SPEED_FRONT := 62.0  # 前层建筑速度，人物需稍快
+var _walkers: Array = []        # 每个: {tex, name, h, frame_w, x, y, speed, dir, frame, anim_t, turn_cd, turnable}
+
 # 视差滚动：四层山偏移（越远越慢）+ 前景建筑
 var _mountain_offsets := [0.0, 0.0, 0.0, 0.0]
 const MOUNTAIN_SPEEDS := [6.0, 12.0, 20.0, 30.0]   # 远→近
@@ -91,7 +106,9 @@ const RESOLUTIONS := [
 
 func _ready() -> void:
 	_setup_fonts()
+	_title_tex = load("res://assets/ui/title_banner.png") if ResourceLoader.exists("res://assets/ui/title_banner.png") else null
 	_init_parallax()
+	_init_walkers()
 	set_process(true)
 	queue_redraw()
 
@@ -102,7 +119,7 @@ func _ready() -> void:
 func _init_parallax() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 9901
-	var types := ["market", "palace", "pagoda", "pavilion", "gate", "tavern", "tower"]
+	var types := ["market", "palace", "pagoda", "pavilion", "gate", "tavern", "tower", "temple", "academy", "workshop", "pharmacy", "well"]
 	# 每层：数量（密度）、速度、缩放、下边缘 y、分布跨度
 	var layers := [
 		{"count": 4, "speed": 62.0, "scale": 1.05, "base_y": 505.0},  # 前层（低密度）
@@ -127,6 +144,87 @@ func _init_parallax() -> void:
 	# 按 base_y 升序排序：后层(y455)先画 → 中层 → 前层(y505)最后画
 	# 保证遮挡关系正确：前遮中、中遮后
 	_buildings.sort_custom(func(a, b): return float(a["base_y"]) < float(b["base_y"]))
+
+# 初始化行走人物：每种人物一个，速度都略快于前层建筑（62）且各有差异
+func _init_walkers() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260831
+	for i in range(WALKER_NAMES.size()):
+		var name: String = WALKER_NAMES[i]
+		var tex_path := WALKER_DIR + name + ".png"
+		if not ResourceLoader.exists(tex_path):
+			continue
+		var tex: Texture2D = load(tex_path)
+		var frame_w := float(tex.get_width()) / float(WALKER_FRAMES)
+		var y := rng.randf_range(WALKER_Y_TOP, WALKER_Y_BOTTOM)
+		# 透视：脚底越靠下（y 越大）人物越大
+		var t := clampf((y - WALKER_Y_TOP) / (WALKER_Y_BOTTOM - WALKER_Y_TOP), 0.0, 1.0)
+		var h := lerpf(WALKER_H_MIN, WALKER_H_MAX, t) * rng.randf_range(0.94, 1.06)
+		# 初始朝向：约一半左、一半右；儿童更可能偶尔掉头
+		var turnable := name == "儿童" or rng.randf() < 0.18
+		_walkers.append({
+			"tex": tex,
+			"name": name,
+			"h": h,
+			"frame_w": frame_w,
+			"x": rng.randf_range(-60.0, DESIGN_W + 60.0),
+			"y": y,
+			"speed": WALKER_SPEED_FRONT + rng.randf_range(4.0, 26.0),  # 66~88，比建筑62快
+			"dir": -1.0 if rng.randf() < 0.5 else 1.0,
+			"frame": rng.randi_range(0, WALKER_FRAMES - 1),
+			"anim_t": rng.randf() * 0.5,
+			"turn_cd": rng.randf_range(3.0, 8.0),
+			"turnable": turnable,
+		})
+
+func _update_walkers(delta: float) -> void:
+	for w in _walkers:
+		# 行走：速度比前层建筑稍快，方向左或右
+		var dir: float = w["dir"]
+		w["x"] = float(w["x"]) + dir * float(w["speed"]) * delta
+		# 动画帧推进（约 6 帧/秒）
+		w["anim_t"] = float(w["anim_t"]) + delta * 6.0
+		w["frame"] = int(w["anim_t"]) % WALKER_FRAMES
+		# 超出屏幕：从另一侧回来
+		var x: float = w["x"]
+		if dir > 0.0 and x > DESIGN_W + 80.0:
+			w["x"] = -80.0
+		elif dir < 0.0 and x < -80.0:
+			w["x"] = DESIGN_W + 80.0
+		# 低概率掉头（以儿童为主）：倒计时归零时按概率翻转
+		w["turn_cd"] = float(w["turn_cd"]) - delta
+		if float(w["turn_cd"]) <= 0.0:
+			w["turn_cd"] = rng_next_turn(w)
+			if bool(w["turnable"]) and randf() < 0.35:
+				w["dir"] = -dir
+
+func rng_next_turn(w: Dictionary) -> float:
+	# 可掉头人物：约 6~14 秒一次机会；不可掉头：很长间隔
+	if bool(w["turnable"]):
+		return randf_range(6.0, 14.0)
+	return randf_range(30.0, 60.0)
+
+# 绘制行走人物：脚底对齐基线，左/右翻转
+func _draw_walkers() -> void:
+	for w in _walkers:
+		var tex: Texture2D = w["tex"]
+		var h: float = w["h"]
+		var frame_w: float = w["frame_w"]
+		var frame: int = w["frame"]
+		var src := Rect2(float(frame) * frame_w, 0.0, frame_w, float(tex.get_height()))
+		# 等比缩放：宽度按原图比例
+		var wpx := frame_w / float(tex.get_height()) * h
+		var x: float = w["x"]
+		var y: float = w["y"]
+		var dir: float = w["dir"]
+		var dst := Rect2(x - wpx * 0.5, y - h, wpx, h)
+		# 向左：用局部负缩放实现水平翻转（绘制后恢复全局变换）
+		if dir < 0.0:
+			draw_set_transform(_offset + Vector2(dst.end.x, dst.position.y), 0.0, Vector2(-_scale, _scale))
+			draw_texture_rect_region(tex, Rect2(Vector2.ZERO, dst.size), src, Color(1, 1, 1, 0.96))
+			draw_set_transform(_offset, 0.0, Vector2(_scale, _scale))
+		else:
+			draw_texture_rect_region(tex, dst, src, Color(1, 1, 1, 0.96))
 
 func _setup_fonts() -> void:
 	var sf := SystemFont.new()
@@ -158,6 +256,12 @@ func _process(delta: float) -> void:
 	if _redraw_accum >= 0.033:
 		_redraw_accum = 0.0
 		queue_redraw()
+	# 行走人物更新
+	_update_walkers(delta)
+	# 标题淡入（进入界面后 0.8s 内渐显）
+	if _title_alpha < 1.0:
+		_title_alpha = minf(1.0, _title_alpha + delta / 0.8)
+		queue_redraw()
 
 func _draw() -> void:
 	var s := minf(size.x / DESIGN_W, size.y / DESIGN_H)
@@ -170,6 +274,7 @@ func _draw() -> void:
 	_draw_mountains()
 	_draw_ground()
 	_draw_foreground_buildings()
+	_draw_walkers()
 	_draw_title()
 	_draw_main_buttons()
 	_draw_version()
@@ -279,6 +384,16 @@ func _draw_foreground_buildings() -> void:
 				_draw_building_tavern(fade)
 			"tower":
 				_draw_building_tower(fade)
+			"temple":
+				_draw_building_temple(fade)
+			"academy":
+				_draw_building_academy(fade)
+			"workshop":
+				_draw_building_workshop(fade)
+			"pharmacy":
+				_draw_building_pharmacy(fade)
+			"well":
+				_draw_building_well(fade)
 		draw_set_transform(_offset, 0.0, Vector2(_scale, _scale))
 
 func _draw_ground() -> void:
@@ -401,6 +516,117 @@ func _draw_building_tower(fade := 1.0) -> void:
 	draw_line(Vector2(0, y), Vector2(0, y - 22.0), _ca(ROOF_DARK, fade), 2.5)
 	draw_circle(Vector2(0, y - 25.0), 3.5, _ca(ROOF_DARK, fade))
 
+func _draw_building_temple(fade := 1.0) -> void:
+	# 寺庙：石台 + 单层大殿 + 重檐歇山顶 + 两侧经幢
+	draw_rect(Rect2(-78.0, -8.0, 156.0, 8.0), _ca(Color("#b7b19e"), fade))
+	_wall(-68.0, 68.0, -52.0, -8.0, _ca(Color("#a88a5a"), fade))
+	# 大门
+	draw_rect(Rect2(-16.0, -44.0, 32.0, 36.0), _ca(INK.darkened(0.3), fade))
+	_arch(Vector2(0, -8.0), 14.0, 20.0, _ca(Color("#6f5434"), fade))
+	# 重檐屋顶
+	_roof(-80.0, 80.0, -52.0, 26.0, _ca(Color("#7c5a2e"), fade))
+	_roof(-58.0, 58.0, -62.0, 16.0, _ca(Color("#8a6a3a"), fade))
+	draw_line(Vector2(0, -76.0), Vector2(0, -82.0), _ca(GOLD_DARK, fade), 2.0)
+	draw_circle(Vector2(0, -85.0), 3.0, _ca(GOLD_DARK, fade))
+	# 左侧经幢（石柱+塔刹）
+	draw_rect(Rect2(-96.0, -30.0, 8.0, 30.0), _ca(STONE, fade))
+	_roof(-101.0, -91.0, -30.0, 10.0, _ca(STONE, fade))
+	draw_line(Vector2(-92.0, -38.0), Vector2(-92.0, -46.0), _ca(STONE, fade), 2.0)
+	draw_circle(Vector2(-92.0, -48.0), 2.5, _ca(STONE, fade))
+	# 右侧经幢
+	draw_rect(Rect2(88.0, -30.0, 8.0, 30.0), _ca(STONE, fade))
+	_roof(91.0, 101.0, -30.0, 10.0, _ca(STONE, fade))
+	draw_line(Vector2(92.0, -38.0), Vector2(92.0, -46.0), _ca(STONE, fade), 2.0)
+	draw_circle(Vector2(92.0, -48.0), 2.5, _ca(STONE, fade))
+
+func _draw_building_academy(fade := 1.0) -> void:
+	# 书院：两层书楼 + 垂花门 + 书卷横匾
+	draw_rect(Rect2(-70.0, -8.0, 140.0, 8.0), _ca(Color("#b7b19e"), fade))
+	_wall(-60.0, 60.0, -56.0, -8.0, _ca(Color("#a89468"), fade))
+	# 一楼窗棂
+	for i in range(3):
+		draw_rect(Rect2(-48.0 + float(i) * 34.0, -40.0, 22.0, 32.0), _ca(Color("#efe3c0"), fade))
+		draw_line(Vector2(-37.0 + float(i) * 34.0, -40.0), Vector2(-37.0 + float(i) * 34.0, -8.0), _ca(Color("#6f6755"), fade), 1.5)
+	# 二楼
+	_wall(-46.0, 46.0, -92.0, -56.0, _ca(Color("#b5a070"), fade))
+	draw_rect(Rect2(-30.0, -84.0, 60.0, 24.0), _ca(Color("#efe3c0"), fade))
+	# 屋顶
+	_roof(-76.0, 76.0, -92.0, 24.0, _ca(Color("#5b4028"), fade))
+	# 横匾
+	draw_rect(Rect2(-30.0, -52.0, 60.0, 10.0), _ca(Color("#3a362e"), fade))
+	for i in range(3):
+		draw_rect(Rect2(-24.0 + float(i) * 16.0, -50.0, 8.0, 6.0), _ca(Color("#efe3c0"), fade))
+	# 垂花门（两侧小门）
+	_wall(-86.0, -62.0, -34.0, -8.0, _ca(Color("#8a7c5e"), fade))
+	_roof(-92.0, -56.0, -34.0, 12.0, _ca(Color("#5b4028"), fade))
+	_wall(62.0, 86.0, -34.0, -8.0, _ca(Color("#8a7c5e"), fade))
+	_roof(56.0, 92.0, -34.0, 12.0, _ca(Color("#5b4028"), fade))
+
+func _draw_building_workshop(fade := 1.0) -> void:
+	# 工坊：砖墙 + 窑炉 + 烟囱 + 工具架
+	draw_rect(Rect2(-64.0, -8.0, 128.0, 8.0), _ca(Color("#a08a6a"), fade))
+	_wall(-58.0, 58.0, -48.0, -8.0, _ca(Color("#9a7f5c"), fade))
+	# 大门
+	draw_rect(Rect2(-20.0, -40.0, 40.0, 32.0), _ca(INK.darkened(0.3), fade))
+	# 窑炉（左）
+	draw_rect(Rect2(-52.0, -34.0, 22.0, 26.0), _ca(Color("#7c5434"), fade))
+	_arch(Vector2(-41.0, -8.0), 9.0, 14.0, _ca(Color("#3a1f10"), fade))
+	draw_line(Vector2(-52.0, -40.0), Vector2(-52.0, -62.0), _ca(Color("#7c5434"), fade), 4.0)
+	draw_circle(Vector2(-52.0, -66.0), 3.5, _ca(Color("#6b4630"), fade))
+	# 右侧工具架
+	draw_line(Vector2(30.0, -48.0), Vector2(30.0, -8.0), _ca(Color("#5b4028"), fade), 2.5)
+	draw_line(Vector2(48.0, -48.0), Vector2(48.0, -8.0), _ca(Color("#5b4028"), fade), 2.5)
+	draw_line(Vector2(26.0, -38.0), Vector2(52.0, -38.0), _ca(Color("#5b4028"), fade), 2.0)
+	draw_line(Vector2(26.0, -24.0), Vector2(52.0, -24.0), _ca(Color("#5b4028"), fade), 2.0)
+	# 屋顶（坡顶）
+	var rw := 72.0
+	_poly(PackedVector2Array([Vector2(-rw, -48.0), Vector2(rw, -48.0), Vector2(rw - 12.0, -8.0), Vector2(-rw + 12.0, -8.0)]), _ca(Color("#6d675c"), fade))
+
+func _draw_building_pharmacy(fade := 1.0) -> void:
+	# 药铺：柜台 + 药架 + 葫芦幌子
+	draw_rect(Rect2(-56.0, -8.0, 112.0, 8.0), _ca(Color("#b7b19e"), fade))
+	_wall(-50.0, 50.0, -50.0, -8.0, _ca(Color("#a89468"), fade))
+	# 药柜（左）
+	_wall(-44.0, -6.0, -44.0, -8.0, _ca(Color("#8a6a3a"), fade))
+	for r in range(2):
+		for c in range(3):
+			draw_rect(Rect2(-42.0 + float(c) * 13.0, -42.0 + float(r) * 18.0, 11.0, 15.0), _ca(Color("#6f5434"), fade))
+	# 柜台（右前）
+	draw_rect(Rect2(4.0, -24.0, 42.0, 24.0), _ca(Color("#8a6a3a"), fade))
+	draw_rect(Rect2(4.0, -24.0, 42.0, 5.0), _ca(Color("#a8823e"), fade))
+	# 屋檐
+	_roof(-64.0, 64.0, -50.0, 18.0, _ca(Color("#5b4028"), fade))
+	# 葫芦幌子（挂杆右侧）
+	draw_line(Vector2(34.0, -68.0), Vector2(34.0, -92.0), _ca(Color("#5b4028"), fade), 2.0)
+	draw_circle(Vector2(34.0, -80.0), 6.0, _ca(Color("#a8823e"), fade))
+	draw_circle(Vector2(34.0, -88.0), 4.0, _ca(Color("#c9a45a"), fade))
+	draw_rect(Rect2(31.0, -96.0, 6.0, 4.0), _ca(Color("#5b4028"), fade))
+
+func _draw_building_well(fade := 1.0) -> void:
+	# 水井亭：井台 + 石井圈 + 辘轳架 + 小亭盖
+	draw_rect(Rect2(-26.0, -12.0, 52.0, 12.0), _ca(STONE, fade))
+	_ellipse(Vector2(0, -12.0), Vector2(15.0, 5.0), _ca(Color("#6b6355"), fade))
+	_ellipse_ring(Vector2(0, -12.0), 15.0, 5.0, _ca(INK.darkened(0.4), fade))
+	# 辘轳架
+	draw_line(Vector2(-22.0, -34.0), Vector2(-22.0, -12.0), _ca(Color("#5b4028"), fade), 3.0)
+	draw_line(Vector2(22.0, -34.0), Vector2(22.0, -12.0), _ca(Color("#5b4028"), fade), 3.0)
+	draw_rect(Rect2(-24.0, -40.0, 48.0, 7.0), _ca(Color("#5b4028"), fade))
+	# 辘轳（横杆）
+	draw_line(Vector2(-22.0, -30.0), Vector2(22.0, -30.0), _ca(Color("#46301c"), fade), 3.0)
+	draw_circle(Vector2(0, -30.0), 5.0, _ca(Color("#5b4028"), fade))
+	# 亭盖（攒尖）
+	_roof(-34.0, 34.0, -40.0, 14.0, _ca(Color("#8a6a3a"), fade))
+	draw_line(Vector2(0, -52.0), Vector2(0, -58.0), _ca(GOLD_DARK, fade), 2.0)
+	draw_circle(Vector2(0, -60.0), 2.5, _ca(GOLD_DARK, fade))
+
+func _ellipse_ring(c: Vector2, rx: float, ry: float, color: Color) -> void:
+	var pts := PackedVector2Array()
+	for i in range(24):
+		var a := float(i) / 24.0 * TAU
+		pts.append(c + Vector2(cos(a) * rx, sin(a) * ry))
+	pts.append(c + Vector2(rx, ry))
+	_poly(pts, color)
+
 # ---- 建筑基础构件 ----
 func _wall(x0: float, x1: float, y_top: float, y_bottom: float, color: Color) -> void:
 	color = _ca(color, _build_fade)
@@ -453,11 +679,20 @@ func _ca(c: Color, a: float) -> Color:
 
 # ==================== 标题 ====================
 func _draw_title() -> void:
-	var r := Rect2(TITLE_POS.x - 260.0, TITLE_POS.y - 60.0, 520.0, 100.0)
-	_round_rect_fill(r, 16.0, Color(0.13, 0.10, 0.08, 0.30))
-	_round_rect_stroke(r, 16.0, Color("#c9a45a", 0.55), 2.0)
-	_text_center(font_song, "百事录·唐", 64.0, Color("#3a2c1c"), Vector2(TITLE_POS.x, TITLE_POS.y))
-	_text_center(font_hei, _t("—— 长安盛景，百事留录 ——", "— Record of Tang Splendor —"), 15.0, Color("#7c5b38"), Vector2(TITLE_POS.x, TITLE_POS.y + 42.0))
+	var alpha := _title_alpha
+	if _title_tex != null:
+		# 标题横幅图：等比缩放，保持 2006×784 宽高比
+		var banner_w := 700.0
+		var banner_h := banner_w * 784.0 / 2006.0   # ≈273.6
+		var r := Rect2(TITLE_POS.x - banner_w * 0.5, TITLE_POS.y - banner_h * 0.5 - 14.0, banner_w, banner_h)
+		draw_texture_rect(_title_tex, r, false, Color(1, 1, 1, alpha))
+	else:
+		# 素材缺失时回退为文字标题
+		_round_rect_fill(Rect2(TITLE_POS.x - 260.0, TITLE_POS.y - 60.0, 520.0, 100.0), 16.0, Color(0.13, 0.10, 0.08, 0.30 * alpha))
+		_round_rect_stroke(Rect2(TITLE_POS.x - 260.0, TITLE_POS.y - 60.0, 520.0, 100.0), 16.0, Color("#c9a45a", 0.55 * alpha), 2.0)
+		_text_center(font_song, "百事录·唐", 64.0, Color("#3a2c1c", alpha), Vector2(TITLE_POS.x, TITLE_POS.y))
+	# 副标题保留（位于横幅下方）
+	_text_center(font_hei, _t("—— 长安盛景，百事留录 ——", "— Record of Tang Splendor —"), 15.0, Color("#7c5b38", alpha), Vector2(TITLE_POS.x, TITLE_POS.y + 150.0))
 
 # ==================== 主按钮 ====================
 func _draw_main_buttons() -> void:
@@ -660,8 +895,18 @@ func _text_right(font: Font, text: String, size: float, color: Color, right: Vec
 
 func _poly(points: PackedVector2Array, color: Color) -> void:
 	var idx := Geometry2D.triangulate_polygon(points)
+	if idx.size() < 3:
+		return
 	for t in range(0, idx.size(), 3):
-		draw_colored_polygon(PackedVector2Array([points[idx[t]], points[idx[t + 1]], points[idx[t + 2]]]), color)
+		var tri := PackedVector2Array([points[idx[t]], points[idx[t + 1]], points[idx[t + 2]]])
+		# 跳过退化/极细长三角形（近零面积），避免 triangulation 失败刷屏
+		var a := tri[0]
+		var b := tri[1]
+		var c := tri[2]
+		var cross := (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+		if absf(cross) < 1.0:
+			continue
+		draw_colored_polygon(tri, color)
 
 func _ellipse(c: Vector2, radius: Vector2, color: Color, rot := 0.0) -> void:
 	var pts := PackedVector2Array()
