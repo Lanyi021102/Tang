@@ -10,26 +10,9 @@
 [ext_resource type="Script" uid="uid://ca186i5jn8qxd" path="res://scenes/streets.gd" id="12_streets"]
 [ext_resource type="Script" uid="uid://dplafltmrmv2q" path="res://scenes/npcs.gd" id="13_npcs"]
 [ext_resource type="Script" uid="uid://bk30nm0scbsrj" path="res://scenes/markers.gd" id="14_markers"]
+[ext_resource type="Script" uid="uid://cedyi286rjjhg" path="res://scenes/outline_layer.gd" id="14_outline"]
 [ext_resource type="Script" uid="uid://cyopkvcs7gr6s" path="res://scenes/clouds.gd" id="15_clouds"]
-[ext_resource type="Script" path="res://scenes/outline_layer.gd" id="14_outline"]
-[ext_resource type="Texture2D" uid="uid://cru202ykvok8r" path="res://assets/Background.jpg" id="16_bg"]
-[ext_resource type="Texture2D" uid="uid://dg664htex3m2l" path="res://assets/ui/btn_back_normal.png" id="17_bn"]
-[ext_resource type="Texture2D" uid="uid://c1ee430mqjsjb" path="res://assets/ui/btn_back_hover.png" id="18_bh"]
-[ext_resource type="Texture2D" uid="uid://bt4oy4typ4tla" path="res://assets/ui/btn_back_pressed.png" id="19_bp"]
-[ext_resource type="Texture2D" uid="uid://c5t2xs8w57y7i" path="res://assets/ui/btn_codex_normal.png" id="20_cn"]
-[ext_resource type="Texture2D" uid="uid://cn14ki3hkt2qw" path="res://assets/ui/btn_codex_hover.png" id="21_ch"]
-[ext_resource type="Texture2D" uid="uid://h3sc3trq3phc" path="res://assets/ui/btn_codex_pressed.png" id="22_cp"]
-[ext_resource type="Texture2D" uid="uid://c1idkhab6rsis" path="res://assets/ui/btn_near_normal.png" id="23_nn"]
-[ext_resource type="Texture2D" uid="uid://bieum3xf53cuq" path="res://assets/ui/btn_near_hover.png" id="24_nh"]
-[ext_resource type="Texture2D" uid="uid://bvwl6815xoly" path="res://assets/ui/btn_near_pressed.png" id="25_np"]
-[ext_resource type="Texture2D" uid="uid://t2ua2de1oa78" path="res://assets/ui/btn_mid_normal.png" id="26_mn"]
-[ext_resource type="Texture2D" uid="uid://dj423x6ys0xpa" path="res://assets/ui/btn_mid_hover.png" id="27_mh"]
-[ext_resource type="Texture2D" uid="uid://cgirhigvek318" path="res://assets/ui/btn_mid_pressed.png" id="28_mp"]
-[ext_resource type="Texture2D" uid="uid://d2b4ebilkw7qs" path="res://assets/ui/btn_far_normal.png" id="29_fn"]
-[ext_resource type="Texture2D" uid="uid://blkywnwx4sb1s" path="res://assets/ui/btn_far_hover.png" id="30_fh"]
-[ext_resource type="Texture2D" uid="uid://b60j5goh7wfcx" path="res://assets/ui/btn_far_pressed.png" id="31_fp"]
-[ext_resource type="Texture2D" uid="uid://cyci83ph82snr" path="res://assets/ui/clock_normal.png" id="32_kln"]
-[ext_resource type="Texture2D" uid="uid://bsf6h8cf8iekl" path="res://assets/ui/clock_hover.png" id="33_klh"]
+[ext_resource type="Texture2D" uid="uid://c807vgn3qbeax" path="res://assets/Background.jpg" id="16_bg"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_ts"]
 shader = ExtResource("4_ts")
@@ -384,21 +367,20 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="LeftOpaqueBand" type="ColorRect" parent="UI/HUD"]
+[node name="LeftOpaqueBand" type="ColorRect" parent="UI/HUD" unique_id=1774848924]
 layout_mode = 0
 offset_right = 128.0
 offset_bottom = 720.0
 mouse_filter = 2
 color = Color(0.02, 0.024, 0.022, 1)
 
-[node name="LeftGuard" type="ColorRect" parent="UI/HUD"]
+[node name="LeftGuard" type="ColorRect" parent="UI/HUD" unique_id=1242810556]
 layout_mode = 0
 offset_right = 128.0
 offset_bottom = 648.0
-mouse_filter = 0
 color = Color(0, 0, 0, 0)
 
-[node name="BottomOpaqueBand" type="ColorRect" parent="UI/HUD"]
+[node name="BottomOpaqueBand" type="ColorRect" parent="UI/HUD" unique_id=1275930751]
 layout_mode = 0
 offset_top = 602.0
 offset_right = 1280.0
@@ -406,38 +388,34 @@ offset_bottom = 720.0
 mouse_filter = 2
 color = Color(0.02, 0.024, 0.022, 1)
 
-[node name="BottomUpperGuard" type="ColorRect" parent="UI/HUD"]
+[node name="BottomUpperGuard" type="ColorRect" parent="UI/HUD" unique_id=1688533074]
 layout_mode = 0
 offset_top = 602.0
 offset_right = 1280.0
 offset_bottom = 648.0
-mouse_filter = 0
 color = Color(0, 0, 0, 0)
 
-[node name="BottomLeftGuard" type="ColorRect" parent="UI/HUD"]
+[node name="BottomLeftGuard" type="ColorRect" parent="UI/HUD" unique_id=868764450]
 layout_mode = 0
 offset_top = 648.0
 offset_right = 88.0
 offset_bottom = 720.0
-mouse_filter = 0
 color = Color(0, 0, 0, 0)
 
-[node name="BottomRightGuard" type="ColorRect" parent="UI/HUD"]
+[node name="BottomRightGuard" type="ColorRect" parent="UI/HUD" unique_id=2034573154]
 layout_mode = 0
 offset_left = 1192.0
 offset_top = 648.0
 offset_right = 1280.0
 offset_bottom = 720.0
-mouse_filter = 0
 color = Color(0, 0, 0, 0)
 
-[node name="BottomLowerGuard" type="ColorRect" parent="UI/HUD"]
+[node name="BottomLowerGuard" type="ColorRect" parent="UI/HUD" unique_id=1758342835]
 layout_mode = 0
 offset_left = 88.0
 offset_top = 698.0
 offset_right = 1192.0
 offset_bottom = 720.0
-mouse_filter = 0
 color = Color(0, 0, 0, 0)
 
 [node name="BtnBack" type="TextureButton" parent="UI/HUD" unique_id=1514891696]
