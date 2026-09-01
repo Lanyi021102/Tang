@@ -19,8 +19,8 @@ func _draw() -> void:
 		var zoom: float = map._camera.zoom.x
 		if zoom < 0.01:
 			fang_scale = 0.1 / maxf(zoom, 0.0001)
-	var hw := fang_w * 0.5 * fang_scale * 10.0   # 东西宽度方向 ×2 补偿等距压缩
-	var hh := fang_h * 0.5 * fang_scale * 10.0   # 南北深度方向保持不变
+	var hw := fang_w * 0.5 * fang_scale * 9.9   # 东西宽度方向 ×2 补偿等距压缩
+	var hh := fang_h * 0.5 * fang_scale * 9.9   # 南北深度方向保持不变
 	var NW := Vector2((-hw - hh) * 6.4, (-hw + hh) * 3.2)
 	var NE := Vector2((hw - hh) * 6.4, (hw + hh) * 3.2)
 	var SE := Vector2((hw + hh) * 6.4, (hw - hh) * 3.2)
