@@ -6,7 +6,7 @@ var map
 const TW := 128.0
 const TH := 64.0
 const GRID_COLS := 12
-const GRID_ROWS := 9
+const GRID_ROWS := 13
 const GROUND := Color("#d8ccab")
 
 func _ready() -> void:
