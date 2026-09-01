@@ -23,6 +23,53 @@ const TH := 64.0
 const GRID_COLS := 12
 const GRID_ROWS := 9
 
+# ==================== 唐长安城真实布局数据 ====================
+# 每步对应的像素尺寸（可调）
+const STEP := 0.1
+
+# 14 条东西大街路宽（步）—— 表格左侧奇数行 C 列
+const EW_STREET_WIDTHS := [19, 40, 155, 40, 120, 44, 40, 54, 55, 55, 54, 59, 39, 19]
+# 13 行坊的南北纵深（步）—— 表格左侧偶数行 C 列
+const EW_FANG_DEPTHS := [736, 737, 814, 814, 500, 544, 540, 515, 525, 530, 520, 530, 590]
+# 东西大街名称（与 EW_STREET_WIDTHS 对应）
+const EW_STREET_NAMES := [
+	"外郭城东西第一街", "外郭城东西第二街", "外郭城东西第三街", "外郭城东西第四街",
+	"外郭城东西第五街", "外郭城东西第六街", "外郭城东西第七街", "外郭城东西第八街",
+	"外郭城东西第九街", "外郭城东西第十街", "外郭城东西第十一街", "外郭城东西第十二街",
+	"外郭城东西第十三街", "外郭城东西第十四街",
+]
+
+# 11 条南北大街路宽（步）—— 表格底部 Row 30 偶数列
+const NS_STREET_WIDTHS := [20, 42, 63, 108, 63, 155, 67, 134, 68, 68, 25]
+# 10 列坊的东西宽度（步）—— 表格底部 Row 30 奇数列
+const NS_FANG_WIDTHS := [1115, 1033, 1020, 683, 558, 562, 700, 1022, 1032, 1125]
+# 南北大街名称（与 NS_STREET_WIDTHS 对应）
+const NS_STREET_NAMES := [
+	"朱雀门街西第五街", "朱雀门街西第四街", "朱雀门街西第三街", "朱雀门街西第二街",
+	"朱雀门街西第一街", "朱雀门街", "朱雀门街东第一街", "朱雀门街东第二街",
+	"朱雀门街东第三街", "朱雀门街东第四街", "朱雀门街东第五街",
+]
+
+# 每条东西大街两侧的坊名（西→东，10 个）
+# 街 1-4：中间 7 个为皇城，只渲染西侧 3 坊 + 东侧 3 坊
+# 街 5-14：全部 10 坊
+const EW_FANG_NAMES := [
+	["修真坊","安定坊","修德坊","","","","","光宅坊","长乐坊","入苑坊"],
+	["普宁坊","休祥坊","辅兴坊","","","","","永昌坊","太宁坊","兴宁坊"],
+	["义宁坊","金城坊","颁政坊","","","","","永兴坊","安兴坊","永嘉坊"],
+	["居德坊","醴泉坊","布政坊","","","","","崇仁坊","胜业坊","兴庆宫"],
+	["群贤坊","西市","延寿坊","太平坊","光禄坊","兴道坊","务本坊","平康坊","东市","道政坊"],
+	["怀德坊","西市","光德坊","通义坊","殖业坊","开化坊","崇义坊","宣阳坊","东市","常乐坊"],
+	["崇化坊","怀远坊","延康坊","兴化坊","丰乐坊","安仁坊","长兴坊","亲仁坊","安邑坊","靖恭坊"],
+	["丰邑坊","长寿坊","崇贤坊","崇德坊","安业坊","光福坊","永乐坊","永宁坊","宣平坊","新昌坊"],
+	["待贤坊","嘉会坊","延福坊","怀贞坊","崇业坊","靖善坊","靖安坊","永崇坊","升平坊","升道坊"],
+	["永和坊","永平坊","永安坊","宣义坊","永达坊","兰陵坊","安善坊","昭国坊","修行坊","立政坊"],
+	["常安坊","通轨坊","敦义坊","丰安坊","道德坊","开明坊","大业坊","晋昌坊","修政坊","敦化坊"],
+	["和平坊","归义坊","大通坊","昌明坊","光行坊","保宁坊","昌乐坊","通善坊","青龙坊","缺名"],
+	["永阳坊","昭行坊","大安坊","安乐坊","延祚坊","安义坊","安德坊","通济坊","曲池坊","芙蓉园"],
+]
+# 注：第 14 街（最后一街）南侧无坊，数据保留为空
+
 var font_song: Font
 var font_hei: Font
 var _points: Array = []
@@ -125,7 +172,7 @@ var _markers_node
 var _outline_layer
 
 # camera zoom state
-const ZOOM_LEVELS := [1.2, 3.2, 40.0]
+const ZOOM_LEVELS := [0.008, 0.04, 0.3]
 var _zoom_idx := 1
 var _target_zoom := 1.2
 var _target_pos := Vector2.ZERO
@@ -215,6 +262,30 @@ func _sync_hud_guards() -> void:
 func _iso(c: float, r: float) -> Vector2:
 	return Vector2((c - r) * TW * 0.5, (c + r) * TH * 0.5)
 
+# 步坐标 → 等距屏幕坐标
+func _step_iso(sx: float, sy: float) -> Vector2:
+	return Vector2((sx - sy) * STEP * 64.0, (sx + sy) * STEP * 32.0)
+
+# 第 si 条东西大街北边缘的 y 坐标（步）
+# 布局：街0 → 坊0 → 街1 → 坊1 → ... → 街13
+func _ew_y(si: int) -> float:
+	var y := 0.0
+	for i in range(si):
+		y += float(EW_STREET_WIDTHS[i])
+		if i < EW_FANG_DEPTHS.size():
+			y += float(EW_FANG_DEPTHS[i])
+	return y
+
+# 第 ci 条南北大街西边缘的 x 坐标（步）
+# 布局：街0 → 坊0 → 街1 → 坊1 → ... → 街10
+func _ns_x(ci: int) -> float:
+	var x := 0.0
+	for i in range(ci):
+		x += float(NS_STREET_WIDTHS[i])
+		if i < NS_FANG_WIDTHS.size():
+			x += float(NS_FANG_WIDTHS[i])
+	return x
+
 func _ready() -> void:
 	_setup_fonts()
 	_sync_from_data()
@@ -273,24 +344,31 @@ func _build_lights() -> void:
 	var mat := CanvasItemMaterial.new()
 	mat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	var lights := get_node("Lights")
-	_day_lights.append(_add_light(lights, tex, mat, _iso(6.0, 3.0), Vector2(1.5, 1.5), Color(1.0, 0.92, 0.74)))
-	_day_lights.append(_add_light(lights, tex, mat, _iso(3.0, 6.0), Vector2(1.2, 1.2), Color(1.0, 0.9, 0.7)))
-	_day_lights.append(_add_light(lights, tex, mat, _iso(9.0, 6.0), Vector2(1.2, 1.2), Color(1.0, 0.9, 0.7)))
+	_day_lights.append(_add_light(lights, tex, mat, _step_iso(4800.0, 3000.0), Vector2(150, 150), Color(1.0, 0.92, 0.74)))
+	_day_lights.append(_add_light(lights, tex, mat, _step_iso(2000.0, 5000.0), Vector2(120, 120), Color(1.0, 0.9, 0.7)))
+	_day_lights.append(_add_light(lights, tex, mat, _step_iso(7000.0, 5000.0), Vector2(120, 120), Color(1.0, 0.9, 0.7)))
 	# sun light (moves east -> west during the day)
-	_sun_light = _add_light(lights, tex, mat, _iso(6.0, 4.5), Vector2(2.4, 2.4), Color(1.0, 0.92, 0.74))
+	_sun_light = _add_light(lights, tex, mat, _step_iso(4831.5, 4334.0), Vector2(240, 240), Color(1.0, 0.92, 0.74))
 	# night candle lights inside every fang (small lamps)
 	var fnl := get_node("FangLights")
 	var rng2 := RandomNumberGenerator.new()
 	rng2.seed = 777
-	for r in range(1, GRID_ROWS):
-		for c in range(GRID_COLS):
-			if _occupied(c, r):
-				continue
-			var n := rng2.randi_range(1, 2)
+	for si in range(14):
+		if si >= EW_FANG_DEPTHS.size():
+			continue  # 第 14 街南侧无坊
+		for ci in range(10):
+			if si < EW_FANG_NAMES.size() and ci < EW_FANG_NAMES[si].size():
+				if EW_FANG_NAMES[si][ci] == "":
+					continue
+			var fx := _ns_x(ci) + float(NS_STREET_WIDTHS[ci])
+			var fy := _ew_y(si) + float(EW_STREET_WIDTHS[si])
+			var fw := float(NS_FANG_WIDTHS[ci])
+			var fh := float(EW_FANG_DEPTHS[si])
+			var n := rng2.randi_range(1, 3)
 			for k in range(n):
-				var lc := float(c) + rng2.randf_range(0.25, 0.75)
-				var lr := float(r) + rng2.randf_range(0.25, 0.75)
-				_fang_lights.append(_add_light(fnl, tex, mat, _iso(lc, lr), Vector2(0.5, 0.5), Color(1.0, 0.78, 0.45)))
+				var lc := fx + rng2.randf_range(0.2, 0.8) * fw
+				var lr := fy + rng2.randf_range(0.2, 0.8) * fh
+				_fang_lights.append(_add_light(fnl, tex, mat, _step_iso(lc, lr), Vector2(50, 50), Color(1.0, 0.78, 0.45)))
 	_ts_mat = get_node("TiltShift/ColorRect").material
 
 func _add_light(parent: Node2D, tex: Texture2D, mat: CanvasItemMaterial, pos: Vector2, scl: Vector2, color: Color) -> Sprite2D:
@@ -323,10 +401,119 @@ func _build_world() -> void:
 	if buildings:
 		for b in buildings.get_children():
 			b.map = self
-	var fangs = get_node_or_null("World/Fangs")
-	if fangs:
-		for f in fangs.get_children():
-			f.map = self
+	# ---- 动态创建坊和街道节点 ----
+	var FangScript = preload("res://scenes/fang_tile.gd")
+	var StreetScript = preload("res://scenes/street_tile.gd")
+	# 确保 Fangs 容器存在
+	var fangs_node = get_node_or_null("World/Fangs")
+	if fangs_node == null:
+		fangs_node = Node2D.new()
+		fangs_node.name = "Fangs"
+		get_node("World").add_child(fangs_node)
+	# 清空旧坊节点
+	for child in fangs_node.get_children():
+		child.queue_free()
+	# 确保 Streets 容器存在
+	var streets_node = get_node_or_null("World/Streets")
+	if streets_node == null:
+		streets_node = Node2D.new()
+		streets_node.name = "Streets"
+		get_node("World").add_child(streets_node)
+	# 清空旧街道节点
+	for child in streets_node.get_children():
+		child.queue_free()
+	# ---- 创建东西大街坊 (14 条街 × 10 列) ----
+	for si in range(14):
+		if si >= EW_FANG_DEPTHS.size():
+			break  # 第 14 街南侧无坊
+		var fang_ns_depth := float(EW_FANG_DEPTHS[si])  # 坊的南北纵深
+		var fy := _ew_y(si) + float(EW_STREET_WIDTHS[si])  # 坊行北边缘 y
+		for ci in range(10):
+			var fname: String = EW_FANG_NAMES[si][ci]
+			if fname == "":
+				continue
+			var fang_ew_width := float(NS_FANG_WIDTHS[ci])  # 坊的东西宽度
+			var fx := _ns_x(ci) + float(NS_STREET_WIDTHS[ci])  # 坊列西边缘 x
+			# 创建坊节点
+			var node := Node2D.new()
+			node.set_script(FangScript)
+			node.name = "坊-%d-%d" % [si, ci]
+			var center_sx := fx + fang_ew_width * 0.5
+			var center_sy := fy + fang_ns_depth * 0.5
+			node.position = _step_iso(center_sx, center_sy)
+			node.set("fang_name", fname)
+			node.set("fang_w", fang_ew_width * STEP)
+			node.set("fang_h", fang_ns_depth * STEP)
+			node.set("cell", Vector2(ci, si))
+			node.set("z_index", int(fy + fang_ns_depth * 0.5) + 1000)
+			fangs_node.add_child(node)
+			node.call("set_map_ref", self)
+	# ---- 创建东西向街道（只覆盖坊区域，不覆盖全城）----
+	var fang_area_ew := float(NS_FANG_WIDTHS.reduce(func(a, b): return a + b, 0)) + float(NS_STREET_WIDTHS.reduce(func(a, b): return a + b, 0))  # = 9663
+	var fang_area_ns := float(EW_FANG_DEPTHS.reduce(func(a, b): return a + b, 0)) + float(EW_STREET_WIDTHS.reduce(func(a, b): return a + b, 0)) - float(EW_STREET_WIDTHS[0]) - float(EW_STREET_WIDTHS[13])  # 不含南北边界路
+	for si in range(15):
+		var node := Node2D.new()
+		node.set_script(StreetScript)
+		var road_w: float
+		var road_len: float
+		var road_y: float
+		var sname: String
+		if si < 14:
+			road_w = float(EW_STREET_WIDTHS[si])
+			road_len = fang_area_ew
+			road_y = _ew_y(si)
+			sname = EW_STREET_NAMES[si]
+		else:
+			road_w = float(EW_STREET_WIDTHS[13])
+			road_len = fang_area_ew
+			road_y = _ew_y(13) + float(EW_FANG_DEPTHS[12])
+			sname = "外郭城南墙"
+		node.name = "EW街%d" % si
+		var center_sx := fang_area_ew * 0.5
+		var center_sy := road_y + road_w * 0.5
+		node.position = _step_iso(center_sx, center_sy)
+		node.set("tile_w", road_len * STEP)
+		node.set("tile_h", road_w * STEP)
+		node.set("tile_name", sname)
+		node.set("tile_type", "东西街道")
+		node.set("road_width", int(float(EW_STREET_WIDTHS[mini(si, 13)])))
+		node.set("road_length", int(road_len))
+		node.set("z_index", int(road_y) + 1000)
+		node.set("color", Color("#8fb8c9"))
+		streets_node.add_child(node)
+		node.call("set_map_ref", self)
+	# ---- 创建南北向街道（只覆盖坊区域）----
+	for ci in range(12):
+		var node := Node2D.new()
+		node.set_script(StreetScript)
+		var road_w: float
+		var road_len: float
+		var road_x: float
+		var sname: String
+		if ci < 11:
+			road_w = float(NS_STREET_WIDTHS[ci])
+			road_len = fang_area_ns
+			road_x = _ns_x(ci)
+			sname = NS_STREET_NAMES[ci]
+		else:
+			road_w = float(NS_STREET_WIDTHS[10])
+			road_len = fang_area_ns
+			road_x = _ns_x(10) + float(NS_FANG_WIDTHS[9])
+			sname = "外郭城东墙"
+		node.name = "NS街%d" % ci
+		var center_sx := road_x + road_w * 0.5
+		var center_sy := fang_area_ns * 0.5
+		node.position = _step_iso(center_sx, center_sy)
+		node.set("tile_w", road_w * STEP)
+		node.set("tile_h", road_len * STEP)
+		node.set("tile_name", sname)
+		node.set("tile_type", "南北街道")
+		node.set("road_width", int(float(NS_STREET_WIDTHS[mini(ci, 10)])))
+		node.set("road_length", int(road_len))
+		node.set("z_index", 100000)
+		node.set("color", Color("#7daab8"))
+		streets_node.add_child(node)
+		node.call("set_map_ref", self)
 
 func _redraw_world() -> void:
 	if _world:
@@ -356,17 +543,19 @@ func _set_zoom(idx: int, snap: bool = false) -> void:
 		_ui.queue_redraw()
 
 func _cam_pos_for(idx: int) -> Vector2:
+	# 城市中心：东西 4831.5 步，南北 4334 步
+	var center := _step_iso(4831.5, 4334.0)
 	match idx:
 		0:
-			return _iso(6.0, 4.5) + Vector2(0, 40)
+			return center
 		2:
 			return _near_fang_center()
 		_:
-			return _iso(6.0, 3.2) + Vector2(0, 40)
+			return center + Vector2(0, 200)
 
 func _near_fang_center() -> Vector2:
-	# a representative 坊 (east-south residential ward)
-	return _iso(7.5, 7.5) + Vector2(0, 20)
+	# 默认放大到城南区域（坊密集区）
+	return _step_iso(4831.5, 6000.0)
 
 func _ease_out_cubic(t: float) -> float:
 	var u := 1.0 - t
@@ -445,13 +634,19 @@ func _refresh_outline_layer() -> void:
 func _outline_for(cell: Vector2) -> PackedVector2Array:
 	if cell.x < 0:
 		return PackedVector2Array()
-	var c := cell.x
-	var r := cell.y
+	var ci := int(cell.x)
+	var si := int(cell.y)
+	if si >= EW_FANG_DEPTHS.size() or ci >= 10:
+		return PackedVector2Array()
+	var fx := _ns_x(ci) + float(NS_STREET_WIDTHS[ci])
+	var fy := _ew_y(si) + float(EW_STREET_WIDTHS[si])
+	var fw := float(NS_FANG_WIDTHS[ci])
+	var fh := float(EW_FANG_DEPTHS[si])
 	var corners := PackedVector2Array([
-		_iso(c, r),
-		_iso(c + 1.0, r),
-		_iso(c + 1.0, r + 1.0),
-		_iso(c, r + 1.0),
+		_step_iso(fx, fy),
+		_step_iso(fx + fw, fy),
+		_step_iso(fx + fw, fy + fh),
+		_step_iso(fx, fy + fh),
 	])
 	var out := PackedVector2Array()
 	for p in corners:
@@ -776,10 +971,10 @@ func _update_lighting() -> void:
 		if t < 0.0 or t > 1.0:
 			_sun_light.modulate.a = 0.0
 		else:
-			var cx := _iso(6.0, 4.5).x
-			var cy := _iso(6.0, 4.5).y
-			var sx := lerpf(820.0, -820.0, t)
-			var sy := -absf(sin(t * PI)) * 680.0
+			var cx := _step_iso(4831.5, 4334.0).x
+			var cy := _step_iso(4831.5, 4334.0).y
+			var sx := lerpf(82000.0, -82000.0, t)
+			var sy := -absf(sin(t * PI)) * 68000.0
 			_sun_light.position = Vector2(cx + sx, cy + sy)
 			var warm := clampf(1.0 - absf(t - 0.5) * 1.6, 0.3, 1.0)
 			_sun_light.modulate = Color(1.0, 0.82 + 0.12 * warm, 0.58 + 0.26 * warm, 0.15 + 0.5 * sun)
@@ -812,7 +1007,7 @@ func _process(delta: float) -> void:
 		return
 	if _follow_group >= 0 and _follow_group < _groups.size():
 		var fg: Dictionary = _groups[_follow_group]
-		_target_pos = _iso(fg["c"], fg["r"])
+		_target_pos = _step_iso(fg["c"], fg["r"])
 		_target_zoom = ZOOM_LEVELS[2]
 	if _cam_anim:
 		_cam_anim_t += delta
@@ -1145,8 +1340,12 @@ func _handle_click(screen_pos: Vector2) -> void:
 	if fang.x >= 0:
 		_selected_fang = fang
 		_select(_fang_data(fang.x, fang.y))
-		_zoom_idx = 2
-		_start_cam_anim(ZOOM_LEVELS[2], _iso(fang.x + 0.5, fang.y + 0.5))
+		_redraw_world()
+		return
+	var street := _street_at(world_pos)
+	if not street.is_empty():
+		_selected_fang = Vector2(-1, -1)
+		_select(_street_data(street))
 		_redraw_world()
 		return
 	if not _selected.is_empty():
@@ -1155,44 +1354,158 @@ func _handle_click(screen_pos: Vector2) -> void:
 		_group_chat_open = false
 		_ui.queue_redraw()
 
-func _fang_at(world_pos: Vector2) -> Vector2:
-	var x := world_pos.x
-	var y := world_pos.y
-	var C := (x / (TW * 0.5) + y / (TH * 0.5)) * 0.5
-	var R := (y / (TH * 0.5) - x / (TW * 0.5)) * 0.5
-	var c := int(floor(C))
-	var r := int(floor(R))
-	if c < 0 or c >= GRID_COLS or r < 0 or r >= GRID_ROWS:
-		return Vector2(-1, -1)
-	if _occupied(c, r):
-		return Vector2(-1, -1)
-	return Vector2(c, r)
+# 世界坐标 → 步坐标（逆 ISO）
+func _world_to_step(world_pos: Vector2) -> Vector2:
+	var sx := (world_pos.x / (STEP * 64.0) + world_pos.y / (STEP * 32.0)) * 0.5
+	var sy := (world_pos.y / (STEP * 32.0) - world_pos.x / (STEP * 64.0)) * 0.5
+	return Vector2(sx, sy)
 
+# 矩形点击检测：世界坐标 → 命中的坊 (si, ci)，未命中返回 Vector2(-1, -1)
+func _fang_at(world_pos: Vector2) -> Vector2:
+	var step := _world_to_step(world_pos)
+	var sx := step.x
+	var sy := step.y
+	# 查找所在坊行
+	var fang_row := -1
+	for si in range(EW_FANG_DEPTHS.size()):
+		var fy := _ew_y(si) + float(EW_STREET_WIDTHS[si])
+		var fh := float(EW_FANG_DEPTHS[si])
+		if sy >= fy and sy < fy + fh:
+			fang_row = si
+			break
+	if fang_row < 0:
+		return Vector2(-1, -1)
+	# 查找所在坊列
+	var fang_col := -1
+	for ci in range(10):
+		var fx := _ns_x(ci) + float(NS_STREET_WIDTHS[ci])
+		var fw := float(NS_FANG_WIDTHS[ci])
+		if sx >= fx and sx < fx + fw:
+			fang_col = ci
+			break
+	if fang_col < 0:
+		return Vector2(-1, -1)
+	# 检查是否为皇城空位
+	if fang_row < EW_FANG_NAMES.size() and fang_col < EW_FANG_NAMES[fang_row].size():
+		if EW_FANG_NAMES[fang_row][fang_col] == "":
+			return Vector2(-1, -1)
+	return Vector2(fang_col, fang_row)
+
+# 坊数据（用于点击后显示卡片）
 func _fang_data(c: float, r: float) -> Dictionary:
 	var ci := int(c)
-	var ri := int(r)
-	var name := _fang_name_of(ci, ri)
+	var si := int(r)
+	var fname: String = ""
+	if si < EW_FANG_NAMES.size() and ci < EW_FANG_NAMES[si].size():
+		fname = EW_FANG_NAMES[si][ci]
+	if fname == "":
+		fname = "里坊"
+	var ew_size := int(float(NS_FANG_WIDTHS[ci]))    # 东西尺寸
+	var ns_size := int(float(EW_FANG_DEPTHS[si]))    # 南北尺寸
+	var ew_street_name: String = EW_STREET_NAMES[si] if si < EW_STREET_NAMES.size() else ""
+	var ns_street_name: String = NS_STREET_NAMES[ci] if ci < NS_STREET_NAMES.size() else ""
 	return {
-		"key": "FANG-%d-%d" % [ci, ri],
-		"name": name,
+		"key": "FANG-%d-%d" % [ci, si],
+		"name": fname,
 		"trad": "",
 		"type": "坊",
-		"zone": "坊",
-		"description": "唐长安城的一座里坊，四周环以坊墙，坊内由十字街分为四区，分布着宅第、寺观与店铺。",
-		"location": "外郭城第%d列·第%d行" % [ci, ri],
+		"zone": "外郭城",
+		"description": "%s，东西约%d步，南北约%d步。北侧为%s，东侧为%s。" % [fname, ew_size, ns_size, ew_street_name, ns_street_name],
+		"location": "%s · 第%d列" % [ew_street_name, ci + 1],
 		"function": "居住与坊内生活",
 		"built": "",
 		"aliases": "",
 		"quote": "",
 		"source": "《唐两京城坊考》卷一",
+		"ew_size": ew_size,
+		"ns_size": ns_size,
+		"north_road": ew_street_name,
+		"east_road": ns_street_name,
 	}
 
 func _fang_name_of(c: int, r: int) -> String:
-	if _world:
-		var n = _world.get_node_or_null("Fangs/坊-%d-%d" % [c, r])
-		if n and String(n.get("fang_name")) != "":
-			return String(n.get("fang_name"))
-	return "里坊（第%d列·第%d行）" % [c, r]
+	if r < EW_FANG_NAMES.size() and c < EW_FANG_NAMES[r].size():
+		var n: String = EW_FANG_NAMES[r][c]
+		if n != "":
+			return n
+	return "里坊"
+
+# 街道点击检测：返回 ["ew", idx] 或 ["ns", idx] 或空数组
+func _street_at(world_pos: Vector2) -> Array:
+	var step := _world_to_step(world_pos)
+	var sx := step.x
+	var sy := step.y
+	# 检查东西向街道（15 条：街0-13 + 南边界街14）
+	for si in range(15):
+		var road_y: float
+		var road_w: float
+		if si < 14:
+			road_y = _ew_y(si)
+			road_w = float(EW_STREET_WIDTHS[si])
+		else:
+			road_y = _ew_y(13) + float(EW_FANG_DEPTHS[12])
+			road_w = float(EW_STREET_WIDTHS[13])
+		if sy >= road_y and sy < road_y + road_w:
+			return ["ew", si]
+	# 检查南北向街道（12 条：街0-10 + 东边界街11）
+	for ci in range(12):
+		var road_x: float
+		var road_w: float
+		if ci < 11:
+			road_x = _ns_x(ci)
+			road_w = float(NS_STREET_WIDTHS[ci])
+		else:
+			road_x = _ns_x(10) + float(NS_FANG_WIDTHS[9])
+			road_w = float(NS_STREET_WIDTHS[10])
+		if sx >= road_x and sx < road_x + road_w:
+			return ["ns", ci]
+	return []
+
+# 街道数据（用于点击后显示卡片）
+func _street_data(info: Array) -> Dictionary:
+	var dir: String = info[0]
+	var idx: int = info[1]
+	if dir == "ew" and idx < EW_STREET_WIDTHS.size():
+		var w: int = int(float(EW_STREET_WIDTHS[idx]))
+		var l: int = 9663
+		var sname: String = EW_STREET_NAMES[idx] if idx < EW_STREET_NAMES.size() else "外郭城南墙"
+		return {
+			"key": "STREET-EW-%d" % idx,
+			"name": sname,
+			"trad": "",
+			"type": "街道",
+			"zone": "外郭城",
+			"description": "%s，路宽%d步，贯穿东西，全长%d步。" % [sname, w, l],
+			"location": sname,
+			"function": "城市交通干道",
+			"built": "隋开皇二年（582年）",
+			"aliases": "",
+			"quote": "",
+			"source": "《唐两京城坊考》卷一",
+			"road_width": w,
+			"road_length": l,
+		}
+	elif dir == "ns" and idx < NS_STREET_WIDTHS.size():
+		var w: int = int(float(NS_STREET_WIDTHS[idx]))
+		var l: int = 8668
+		var sname: String = NS_STREET_NAMES[idx] if idx < NS_STREET_NAMES.size() else "外郭城东墙"
+		return {
+			"key": "STREET-NS-%d" % idx,
+			"name": sname,
+			"trad": "",
+			"type": "街道",
+			"zone": "外郭城",
+			"description": "%s，路宽%d步，贯穿南北，全长%d步。" % [sname, w, l],
+			"location": sname,
+			"function": "城市交通干道",
+			"built": "隋开皇二年（582年）",
+			"aliases": "",
+			"quote": "",
+			"source": "《唐两京城坊考》卷一",
+			"road_width": w,
+			"road_length": l,
+		}
+	return {}
 
 # ==================== NPC groups ====================
 const KEPU := {
@@ -1257,15 +1570,16 @@ func _member_offset(size: int, idx: int) -> Vector2:
 
 func _gen_route(rng: RandomNumberGenerator) -> Array:
 	var pts: Array = []
-	var c := rng.randi_range(1, GRID_COLS - 1)
-	var r := rng.randi_range(1, GRID_ROWS - 1)
-	pts.append(Vector2(c, r))
+	# 在城市范围内随机生成步坐标路径
+	var sx := rng.randf_range(500.0, 9000.0)
+	var sy := rng.randf_range(500.0, 8000.0)
+	pts.append(Vector2(sx, sy))
 	for i in range(rng.randi_range(6, 12)):
 		if rng.randf() < 0.5:
-			c = clampi(c + (1 if rng.randf() < 0.5 else -1), 1, GRID_COLS - 1)
+			sx = clampf(sx + rng.randf_range(-500.0, 500.0), 200.0, 9400.0)
 		else:
-			r = clampi(r + (1 if rng.randf() < 0.5 else -1), 1, GRID_ROWS - 1)
-		pts.append(Vector2(c, r))
+			sy = clampf(sy + rng.randf_range(-500.0, 500.0), 200.0, 8400.0)
+		pts.append(Vector2(sx, sy))
 	return pts
 
 func _update_npcs(delta: float) -> void:
@@ -1317,7 +1631,7 @@ func _speaking_group_at(screen_pos: Vector2) -> int:
 		if gi < 0 or gi >= _groups.size():
 			continue
 		var g: Dictionary = _groups[gi]
-		var sp := _world_to_screen(_iso(g["c"], g["r"]))
+		var sp := _world_to_screen(_step_iso(g["c"], g["r"]))
 		var c := sp + Vector2(0, -2.0 * _camera.zoom.x)  # 头顶附近
 		c.y -= (24.0 + 7.0)  # 圆框半径 + 间距（屏幕像素）
 		if screen_pos.distance_to(c) <= 26.0:
@@ -1334,7 +1648,7 @@ func _select_group(gi: int) -> void:
 		_panel_anim_t = 0.0
 	_follow_group = gi
 	_zoom_idx = 2
-	_start_cam_anim(ZOOM_LEVELS[2], _iso(g["c"], g["r"]))
+	_start_cam_anim(ZOOM_LEVELS[2], _step_iso(g["c"], g["r"]))
 	var names := PackedStringArray()
 	for m in g["members"]:
 		names.append(String(m["name"]))
@@ -1419,8 +1733,11 @@ func _detect_codex(text: String) -> void:
 func _hit_test(pos: Vector2) -> Dictionary:
 	for p in _points:
 		var gp: Vector2 = GRID_POS.get(String(p["key"]), Vector2(6, 4))
-		var c := _iso(gp.x, gp.y) + Vector2(0, -8)
-		if pos.distance_to(c) <= 18.0:
+		# 将旧网格坐标近似转换为步坐标
+		var sx := gp.x * 805.25
+		var sy := gp.y * 963.1
+		var c := _step_iso(sx, sy) + Vector2(0, -8)
+		if pos.distance_to(c) <= 180.0:
 			return p
 	return {}
 func _select(p: Dictionary) -> void:
