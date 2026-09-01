@@ -14,7 +14,7 @@ const FANG_DIR := "res://assets/fang/"
 
 const CLOCK_RECT := Rect2(1156.0, 16.0, 84.0, 84.0)
 const GROUP_CHAT_RECT := Rect2(940.0, 120.0, 300.0, 380.0)
-const BUILDING_PANEL_RECT := Rect2(850.0, 55.0, 390.0, 610.0)
+const BUILDING_PANEL_RECT := Rect2(850.0, 30.0, 390.0, 660.0)
 const HIST_TIMELINE_RECT := Rect2(180.0, 652.0, 920.0, 54.0)
 const HIST_YEAR_MIN := 582
 const HIST_YEAR_MAX := 907
@@ -430,10 +430,7 @@ func group_chat_close_rect() -> Rect2:
 	return Rect2(GROUP_CHAT_RECT.end.x - 34.0, GROUP_CHAT_RECT.position.y + 7.0, 24.0, 24.0)
 
 func building_close_rect() -> Rect2:
-	return Rect2(BUILDING_PANEL_RECT.end.x - 36.0, BUILDING_PANEL_RECT.position.y + 17.0, 24.0, 24.0)
-
-func knowledge_card_flip_rect() -> Rect2:
-	return Rect2(BUILDING_PANEL_RECT.position.x + 16.0, BUILDING_PANEL_RECT.end.y - 48.0, BUILDING_PANEL_RECT.size.x - 32.0, 34.0)
+	return Rect2(BUILDING_PANEL_RECT.end.x - 32.0, BUILDING_PANEL_RECT.position.y + 18.0, 18.0, 18.0)
 
 func followup_button_rect(i: int) -> Rect2:
 	var bx := BUILDING_PANEL_RECT.position.x + 14.0
@@ -789,11 +786,9 @@ func _handle_click(screen_pos: Vector2) -> void:
 		if building_close_rect().has_point(screen_pos):
 			_deselect()
 			return
-		if knowledge_card_flip_rect().has_point(screen_pos):
+		if BUILDING_PANEL_RECT.has_point(screen_pos):
 			_knowledge_card_back = not _knowledge_card_back
 			_ui.queue_redraw()
-			return
-		if BUILDING_PANEL_RECT.has_point(screen_pos):
 			return
 	var sgi := _speaking_group_at(screen_pos)
 	if sgi >= 0:
