@@ -21,7 +21,11 @@ const CODEX_CATS := ["衣食住行", "建筑与城市规划", "历史"]
 const TW := 128.0
 const TH := 64.0
 const GRID_COLS := 12
-const GRID_ROWS := 9
+const GRID_ROWS := 13
+# 图谱项目坐标以历史城区中心为原点；游戏网格以左上角为原点。
+# 东侧坊在底图上比西侧多占一列，因此使用独立的横向偏移。
+const WEST_POINT_GRID_OFFSET := Vector2(5.0, 3.0)
+const EAST_POINT_GRID_OFFSET := Vector2(6.0, 3.0)
 
 var font_song: Font
 var font_hei: Font
@@ -215,6 +219,17 @@ func _sync_hud_guards() -> void:
 func _iso(c: float, r: float) -> Vector2:
 	return Vector2((c - r) * TW * 0.5, (c + r) * TH * 0.5)
 
+
+func point_grid_position(p: Dictionary) -> Vector2:
+	if not p.has("grid_x") or not p.has("grid_y"):
+		return Vector2(6.0, 6.0)
+	var source_x := float(p.get("grid_x", 0.0))
+	var offset := EAST_POINT_GRID_OFFSET if source_x > 0.0 else WEST_POINT_GRID_OFFSET
+	return Vector2(
+		source_x + offset.x,
+		float(p.get("grid_y", 0.0)) + offset.y
+	)
+
 func _ready() -> void:
 	_setup_fonts()
 	_sync_from_data()
@@ -358,11 +373,11 @@ func _set_zoom(idx: int, snap: bool = false) -> void:
 func _cam_pos_for(idx: int) -> Vector2:
 	match idx:
 		0:
-			return _iso(6.0, 4.5) + Vector2(0, 40)
+			return _iso(6.0, 6.5) + Vector2(0, 40)
 		2:
 			return _near_fang_center()
 		_:
-			return _iso(6.0, 3.2) + Vector2(0, 40)
+			return _iso(6.0, 6.5) + Vector2(0, 40)
 
 func _near_fang_center() -> Vector2:
 	# a representative 坊 (east-south residential ward)
@@ -1418,7 +1433,7 @@ func _detect_codex(text: String) -> void:
 
 func _hit_test(pos: Vector2) -> Dictionary:
 	for p in _points:
-		var gp: Vector2 = GRID_POS.get(String(p["key"]), Vector2(6, 4))
+		var gp := point_grid_position(p)
 		var c := _iso(gp.x, gp.y) + Vector2(0, -8)
 		if pos.distance_to(c) <= 18.0:
 			return p
@@ -1553,8 +1568,19 @@ func _build_prompt(p: Dictionary) -> String:
 	lines.append("【职能】" + String(p.get("function", "")))
 	if String(p.get("built", "")) != "":
 		lines.append("【建造/沿革】" + String(p["built"]))
-	if String(p.get("aliases", "")) != "":
-		lines.append("【别名】" + String(p["aliases"]))
+	var alias_texts := PackedStringArray()
+	var aliases: Variant = p.get("aliases", [])
+	if aliases is Array:
+		for alias in aliases:
+			var alias_item_text := str(alias).strip_edges()
+			if alias_item_text != "":
+				alias_texts.append(alias_item_text)
+	else:
+		var alias_value_text := str(aliases).strip_edges()
+		if alias_value_text != "":
+			alias_texts.append(alias_value_text)
+	if not alias_texts.is_empty():
+		lines.append("【别名】" + "、".join(alias_texts))
 	if String(p.get("quote", "")) != "":
 		lines.append("【原文引文】" + String(p["quote"]))
 	lines.append("【来源】" + String(p.get("source", "")))
