@@ -26,23 +26,82 @@ const NODE_COLOR := Color(0.85, 0.78, 0.58, 0.65)
 
 const ENTER_RECT := Rect2(510.0, 626.0, 260.0, 54.0)
 const MAP_SCENE := "res://scenes/ChangAnCity.tscn"
+const START_SCENE := "res://scenes/Start.tscn"
+const BACK_RECT := Rect2(40.0, 640.0, 120.0, 44.0)
 
 var font_song: Font
 var font_hei: Font
 var _scale := 1.0
 var _offset := Vector2.ZERO
 
+# 按钮点击反馈与提示
+var _pressed_key := ""            # 当前按下的按钮（"guixu"/"weipai"/"tansuo"）
+var _toast_text := ""             # 提示文本
+var _toast_time := 0.0            # 提示剩余时间（秒）
+const TOAST_DURATION := 2.0
+const WOODBOX_RECT := Rect2(60.0, 40.0, 200.0, 46.0)
+const WEIPAI_CENTER := Vector2(1090.0, 620.0)
+const TANSUO_CENTER := Vector2(1222.0, 620.0)
+const BUTTON_R := 46.0
+# 左右切换关卡按钮（垂直居中）
+const PREV_CENTER := Vector2(48.0, 360.0)
+const NEXT_CENTER := Vector2(1232.0, 360.0)
+const NAV_R := 40.0
+
+# 视差滚动：四层山偏移（越远越慢）
+var _mountain_offsets := [0.0, 0.0, 0.0, 0.0]
+const MOUNTAIN_SPEEDS := [6.0, 12.0, 20.0, 30.0]
+# 静态背景纹理缓存（纸张 + 地面），避免每帧重复随机绘制
+var _paper_tex: ImageTexture
+var _ground_tex: ImageTexture
+
 func _ready() -> void:
 	_setup_fonts()
+	_build_static_textures()
+	set_process(true)
 	queue_redraw()
+
+# 预渲染纸张与地面静态纹理（仅一次）
+func _build_static_textures() -> void:
+	_paper_tex = _render_paper_texture()
+	_ground_tex = _render_ground_texture()
+
+func _render_paper_texture() -> ImageTexture:
+	var img := Image.create(DESIGN_W, DESIGN_H, false, Image.FORMAT_RGBA8)
+	for y in range(DESIGN_H):
+		var t := float(y) / float(DESIGN_H - 1)
+		var c := PAPER_TOP.lerp(PAPER_BOT, t)
+		img.fill_rect(Rect2i(0, y, DESIGN_W, 1), c)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260818
+	for i in range(700):
+		var x := rng.randi_range(0, DESIGN_W - 1)
+		var y := rng.randi_range(0, DESIGN_H - 1)
+		var a := rng.randf_range(0.02, 0.06)
+		var col := Color(0.42, 0.38, 0.30, a)
+		img.set_pixel(x, y, col)
+	return ImageTexture.create_from_image(img)
+
+func _render_ground_texture() -> ImageTexture:
+	var img := Image.create(DESIGN_W, DESIGN_H, false, Image.FORMAT_RGBA8)
+	img.fill_rect(Rect2i(0, 452, DESIGN_W, DESIGN_H - 452), Color("#d9cfb0"))
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 77
+	for i in range(300):
+		var x := rng.randi_range(0, DESIGN_W - 1)
+		var y := rng.randi_range(458, DESIGN_H - 1)
+		var a := rng.randf_range(0.03, 0.08)
+		var col := Color(0.40, 0.36, 0.26, a)
+		img.set_pixel(x, y, col)
+	return ImageTexture.create_from_image(img)
 
 func _setup_fonts() -> void:
 	var sf := SystemFont.new()
-	sf.font_names = PackedStringArray(["Songti SC", "Songti", "STSongti-SC-Regular", "STHeiti", "PingFang SC", "Heiti SC"])
+	sf.font_names = PackedStringArray(["QIJIFALLBACK", "Songti SC", "Songti", "STSongti-SC-Regular", "STHeiti", "PingFang SC", "Heiti SC"])
 	sf.allow_system_fallback = true
 	font_song = sf
 	var hf := SystemFont.new()
-	hf.font_names = PackedStringArray(["STHeiti", "PingFang SC", "Heiti SC"])
+	hf.font_names = PackedStringArray(["QIJIFALLBACK", "STHeiti", "PingFang SC", "Heiti SC"])
 	hf.allow_system_fallback = true
 	font_hei = hf
 
@@ -61,49 +120,42 @@ func _draw() -> void:
 	_draw_buildings()
 	_draw_figures()
 	_draw_ui()
+	_draw_toast()
 
 # ==================== background / paper ====================
 func _draw_paper() -> void:
-	var bands := 140
-	for i in range(bands):
-		var t := float(i) / float(bands - 1)
-		var c := PAPER_TOP.lerp(PAPER_BOT, t)
-		var y0 := DESIGN_H * t
-		var y1 := DESIGN_H * (t + 1.0 / bands) + 1.0
-		draw_rect(Rect2(0, y0, DESIGN_W, y1 - y0), c)
-	# rice-paper speckles & fibers (deterministic)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 20260818
-	for i in range(260):
-		var x := rng.randf_range(0, DESIGN_W)
-		var y := rng.randf_range(0, DESIGN_H)
-		var a := rng.randf_range(0.02, 0.06)
-		draw_circle(Vector2(x, y), rng.randf_range(0.5, 1.6), Color(0.42, 0.38, 0.30, a))
-	for i in range(40):
-		var x := rng.randf_range(0, DESIGN_W)
-		var y := rng.randf_range(0, DESIGN_H)
-		var len := rng.randf_range(12, 40)
-		var ang := rng.randf_range(0, PI)
-		var a := rng.randf_range(0.02, 0.05)
-		draw_line(Vector2(x, y), Vector2(x + cos(ang) * len, y + sin(ang) * len), Color(0.42, 0.38, 0.30, a), 0.7)
+	if _paper_tex:
+		draw_texture_rect(_paper_tex, Rect2(0, 0, DESIGN_W, DESIGN_H), false, Color.WHITE)
+	else:
+		var bands := 140
+		for i in range(bands):
+			var t := float(i) / float(bands - 1)
+			var c := PAPER_TOP.lerp(PAPER_BOT, t)
+			var y0 := DESIGN_H * t
+			var y1 := DESIGN_H * (t + 1.0 / bands) + 1.0
+			draw_rect(Rect2(0, y0, DESIGN_W, y1 - y0), c)
 
-func _ridge(seedv: int, base_y: float, amp: float, freq: float) -> PackedVector2Array:
+func _ridge(seedv: int, base_y: float, amp: float, offset: float) -> PackedVector2Array:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seedv
 	var p1 := rng.randf_range(0.0, TAU)
 	var p2 := rng.randf_range(0.0, TAU)
 	var p3 := rng.randf_range(0.0, TAU)
 	var pts := PackedVector2Array()
+	var f1 := 5.0 / DESIGN_W * TAU
+	var f2 := 2.0 / DESIGN_W * TAU
+	var f3 := 1.0 / DESIGN_W * TAU
 	for i in range(161):
 		var x := float(i) / 160.0 * DESIGN_W
-		var h := absf(sin(x * 0.0045 * TAU + p1)) * amp * 0.55 \
-			+ absf(sin(x * 0.0016 * TAU + p2)) * amp * 0.7 \
-			+ absf(sin(x * 0.0007 * TAU + p3)) * amp * 0.28
+		var sx := x + offset  # 偏移采样 → 向左滑动
+		var h := absf(sin(sx * f1 + p1)) * amp * 0.55 \
+			+ absf(sin(sx * f2 + p2)) * amp * 0.7 \
+			+ absf(sin(sx * f3 + p3)) * amp * 0.28
 		pts.append(Vector2(x, base_y - h))
 	return pts
 
-func _mountain_layer(seedv: int, base_y: float, amp: float, freq: float, color: Color) -> void:
-	var ridge := _ridge(seedv, base_y, amp, freq)
+func _mountain_layer(seedv: int, base_y: float, amp: float, color: Color, offset: float) -> void:
+	var ridge := _ridge(seedv, base_y, amp, offset)
 	var poly := PackedVector2Array()
 	for p in ridge:
 		poly.append(p)
@@ -112,10 +164,10 @@ func _mountain_layer(seedv: int, base_y: float, amp: float, freq: float, color: 
 	_poly(poly, color)
 
 func _draw_mountains() -> void:
-	_mountain_layer(11, 300.0, 62.0, 1.0, Color("#d9ddcf"))
-	_mountain_layer(23, 348.0, 74.0, 1.1, Color("#c2cab5"))
-	_mountain_layer(37, 398.0, 82.0, 1.3, Color("#a9b59a"))
-	_mountain_layer(51, 455.0, 96.0, 1.5, Color("#8d9d7e"))
+	_mountain_layer(11, 300.0, 62.0, Color("#d9ddcf"), _mountain_offsets[0])
+	_mountain_layer(23, 348.0, 74.0, Color("#c2cab5"), _mountain_offsets[1])
+	_mountain_layer(37, 398.0, 82.0, Color("#a9b59a"), _mountain_offsets[2])
+	_mountain_layer(51, 455.0, 96.0, Color("#8d9d7e"), _mountain_offsets[3])
 	# fog veils between layers
 	_fog(300.0, 350.0)
 	_fog(352.0, 402.0)
@@ -132,16 +184,11 @@ func _fog(y0: float, y1: float) -> void:
 		draw_rect(Rect2(0, yy0, DESIGN_W, yy1 - yy0), Color(col.r, col.g, col.b, a))
 
 func _draw_ground() -> void:
-	# foreground plane (sandy / rice paper, subtle green)
-	var g := Color("#d9cfb0")
-	draw_rect(Rect2(0, 452.0, DESIGN_W, DESIGN_H - 452.0), g)
-	# faint ground texture strokes
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 77
-	for i in range(90):
-		var x := rng.randf_range(0, DESIGN_W)
-		var y := rng.randf_range(458.0, DESIGN_H)
-		draw_line(Vector2(x, y), Vector2(x + rng.randf_range(4, 16), y + rng.randf_range(-2, 2)), Color(0.40, 0.36, 0.26, 0.05), 0.8)
+	if _ground_tex:
+		draw_texture_rect(_ground_tex, Rect2(0, 0, DESIGN_W, DESIGN_H), false, Color.WHITE)
+	else:
+		var g := Color("#d9cfb0")
+		draw_rect(Rect2(0, 452.0, DESIGN_W, DESIGN_H - 452.0), g)
 	# horizon soft line
 	draw_rect(Rect2(0, 452.0, DESIGN_W, 3.0), Color(0.55, 0.52, 0.42, 0.18))
 
@@ -355,27 +402,31 @@ func _arch(c: Vector2, w: float, h: float, color: Color) -> void:
 	_poly(pts, color)
 
 func _draw_pagoda(cx: float, base_y: float) -> void:
-	# courtyard
-	draw_rect(Rect2(cx - 120.0, base_y - 60.0, 240.0, 60.0), Color("#a29b86"))
-	draw_rect(Rect2(cx - 126.0, base_y - 72.0, 252.0, 14.0), Color("#7c7563"))
-	draw_rect(Rect2(cx - 26.0, base_y - 40.0, 52.0, 40.0), INK.darkened(0.32))
+	# 等比缩小至原来一半：以底部中心为锚点，x/y 均 0.5 缩放（保持比例）
+	draw_set_transform(Vector2(cx, base_y), 0.0, Vector2(0.5, 0.5))
+	# courtyard（相对坐标）
+	draw_rect(Rect2(-120.0, -60.0, 240.0, 60.0), Color("#a29b86"))
+	draw_rect(Rect2(-126.0, -72.0, 252.0, 14.0), Color("#7c7563"))
+	draw_rect(Rect2(-26.0, -40.0, 52.0, 40.0), INK.darkened(0.32))
 	# two small side pavilions
-	_wall(cx - 96.0, cx - 40.0, base_y - 96.0, base_y - 72.0, Color("#a89f88"))
-	_roof(cx - 102.0, cx - 34.0, base_y - 96.0, 16.0, ROOF_DARK)
-	_wall(cx + 40.0, cx + 96.0, base_y - 96.0, base_y - 72.0, Color("#a89f88"))
-	_roof(cx + 34.0, cx + 102.0, base_y - 96.0, 16.0, ROOF_DARK)
+	_wall(-96.0, -40.0, -96.0, -72.0, Color("#a89f88"))
+	_roof(-102.0, -34.0, -96.0, 16.0, ROOF_DARK)
+	_wall(40.0, 96.0, -96.0, -72.0, Color("#a89f88"))
+	_roof(34.0, 102.0, -96.0, 16.0, ROOF_DARK)
 	# pagoda tiers
 	var tiers := [[104.0, 24.0], [90.0, 22.0], [76.0, 20.0], [62.0, 18.0], [48.0, 16.0]]
-	var y := base_y - 72.0
+	var y := -72.0
 	for t in tiers:
 		var w: float = t[0]
 		var h: float = t[1]
-		_wall(cx - w * 0.5, cx + w * 0.5, y - h, y, STONE)
-		_roof(cx - w * 0.5 - 8.0, cx + w * 0.5 + 8.0, y - h, 14.0, ROOF_DARK)
+		_wall(-w * 0.5, w * 0.5, y - h, y, STONE)
+		_roof(-w * 0.5 - 8.0, w * 0.5 + 8.0, y - h, 14.0, ROOF_DARK)
 		y = y - h - 7.0
 	# spire
-	draw_line(Vector2(cx, y), Vector2(cx, y - 26.0), ROOF_DARK, 3.0)
-	draw_circle(Vector2(cx, y - 30.0), 4.0, ROOF_DARK)
+	draw_line(Vector2(0, y), Vector2(0, y - 26.0), ROOF_DARK, 3.0)
+	draw_circle(Vector2(0, y - 30.0), 4.0, ROOF_DARK)
+	# 恢复主绘制变换
+	draw_set_transform(_offset, 0.0, Vector2(_scale, _scale))
 
 func _draw_pond(cx: float, cy: float, rx: float, ry: float) -> void:
 	_ellipse(Vector2(cx, cy), Vector2(rx, ry), Color("#8fb094"))
@@ -441,11 +492,60 @@ func _camel(x: float, y: float, s: float, color: Color) -> void:
 func _draw_ui() -> void:
 	_draw_wood_box(60.0, 40.0)
 	_draw_badge(640.0, 80.0)
-	_draw_bamboo_v(300.0, 176.0, "西域都护府", "40级")
-	_draw_bamboo_v(880.0, 300.0, "长安", "45级")
+	_draw_bamboo_v(260.0, 176.0, "西域都护府", "40级")
+	_draw_bamboo_v(793.0, 176.0, "长安", "45级")
+	_draw_bamboo_v(1040.0, 176.0, "？？", "50级")
+	_draw_nav_button(PREV_CENTER, "←", "prev")
+	_draw_nav_button(NEXT_CENTER, "→", "next")
 	_draw_button(1090.0, 620.0, 46.0, "委派")
 	_draw_button(1222.0, 620.0, 46.0, "探索")
 	_draw_enter_button()
+	_draw_back_button()
+
+# 左下角"返回"按钮（回到 Start 标题界面）
+func _draw_back_button() -> void:
+	var r := BACK_RECT
+	var scale := 1.0
+	if _pressed_key == "back":
+		scale = 0.96
+	var rr := Rect2(r.position + Vector2((1.0 - scale) * r.size.x * 0.5, (1.0 - scale) * r.size.y * 0.5), r.size * scale)
+	_round_rect_fill(rr, 10.0, WOOD)
+	_round_rect_fill(Rect2(rr.position + Vector2(3, 3), rr.size - Vector2(6, 6)), 8.0, WOOD_DARK)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 2026
+	for i in range(3):
+		var gy := rr.position.y + rng.randf_range(8.0, rr.size.y - 8.0)
+		draw_line(Vector2(rr.position.x + 10.0, gy), Vector2(rr.end.x - 10.0, gy), Color(0, 0, 0, 0.14), 1.0)
+	_round_rect_stroke(rr, 10.0, GOLD, 2.0)
+	_round_rect_stroke(Rect2(rr.position + Vector2(2, 2), rr.size - Vector2(4, 4)), 8.0, GOLD_DARK, 1.0)
+	# 返回箭头 + 文字
+	var arrow_x := rr.position.x + 26.0
+	var cy := rr.get_center().y
+	draw_line(Vector2(arrow_x + 8.0, cy), Vector2(arrow_x - 8.0, cy), Color("#efe6d0"), 3.0)
+	draw_line(Vector2(arrow_x - 8.0, cy), Vector2(arrow_x - 2.0, cy - 6.0), Color("#efe6d0"), 3.0)
+	draw_line(Vector2(arrow_x - 8.0, cy), Vector2(arrow_x - 2.0, cy + 6.0), Color("#efe6d0"), 3.0)
+	_text_center(font_song, "返回", 18.0, Color("#efe6d0"), Vector2(rr.position.x + 70.0, cy))
+
+# 左右切换关卡按钮（← / →）
+func _draw_nav_button(c: Vector2, arrow: String, key: String) -> void:
+	var r := NAV_R
+	if _pressed_key == key:
+		r = NAV_R * 0.94
+	draw_circle(c, r, Color("#3a352c"))
+	draw_circle(c, r * 0.84, Color("#463f36"))
+	draw_circle(c, r * 0.60, Color("#524a3e"))
+	draw_arc(c, r, 0.0, TAU, 72, GOLD, 4.0)
+	draw_arc(c, r - 4.0, 0.0, TAU, 72, GOLD_DARK, 1.5)
+	# 水墨箭头
+	var al := r * 0.32
+	if arrow == "←":
+		draw_line(c + Vector2(al, 0), c + Vector2(-al, 0), Color("#f0e1bb"), 4.0)
+		draw_line(c + Vector2(-al, 0), c + Vector2(0, -al), Color("#f0e1bb"), 4.0)
+		draw_line(c + Vector2(-al, 0), c + Vector2(0, al), Color("#f0e1bb"), 4.0)
+	else:
+		draw_line(c + Vector2(-al, 0), c + Vector2(al, 0), Color("#f0e1bb"), 4.0)
+		draw_line(c + Vector2(al, 0), c + Vector2(0, -al), Color("#f0e1bb"), 4.0)
+		draw_line(c + Vector2(al, 0), c + Vector2(0, al), Color("#f0e1bb"), 4.0)
 
 func _draw_enter_button() -> void:
 	var r := ENTER_RECT
@@ -460,12 +560,87 @@ func _draw_enter_button() -> void:
 	_round_rect_stroke(Rect2(r.position + Vector2(2, 2), r.size - Vector2(4, 4)), 12.0, GOLD_DARK, 1.0)
 	_text_center(font_song, "进入长安城", 26.0, Color("#efe6d0"), r.get_center())
 
+# 水墨风提示条（"功能正在开发中"）
+func _draw_toast() -> void:
+	if _toast_time <= 0.0 or _toast_text == "":
+		return
+	var alpha := 1.0
+	var t := _toast_time / TOAST_DURATION
+	if t < 0.3:
+		alpha = t / 0.3  # 末尾淡出
+	elif t > 0.92:
+		alpha = (1.0 - t) / 0.08  # 出现渐入
+	var w := 260.0
+	var h := 56.0
+	var r := Rect2((DESIGN_W - w) * 0.5, 330.0, w, h)
+	_round_rect_fill(r, 14.0, Color(0.12, 0.10, 0.08, 0.88 * alpha))
+	_round_rect_stroke(r, 14.0, Color("#c9a45a", 0.9 * alpha), 2.0)
+	_round_rect_stroke(Rect2(r.position + Vector2(3, 3), r.size - Vector2(6, 6)), 11.0, Color("#8a6a3a", 0.6 * alpha), 1.0)
+	_text_center(font_song, _toast_text, 22.0, Color("#efe6d0", alpha), r.get_center())
+
 func _gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		var mb := event as InputEventMouseButton
 		var pos := (mb.position - _offset) / _scale
-		if ENTER_RECT.has_point(pos):
-			get_tree().change_scene_to_file(MAP_SCENE)
+		var key := _hit_button(pos)
+		if mb.pressed:
+			if key != "":
+				_pressed_key = key
+				queue_redraw()
+			elif ENTER_RECT.has_point(pos):
+				SceneTransition.goto_scene(MAP_SCENE)
+		else:
+			if _pressed_key != "":
+				if key == _pressed_key:
+					if key == "prev" or key == "next":
+						_show_toast("关卡正在开发中")
+					elif key == "back":
+						SceneTransition.goto_scene(START_SCENE)
+					else:
+						_show_toast("功能正在开发中")
+				_pressed_key = ""
+				queue_redraw()
+
+# 判断点击命中的按钮（返回/上一关/下一关/归墟探索/委派/探索），未命中返回空串
+func _hit_button(pos: Vector2) -> String:
+	if BACK_RECT.has_point(pos):
+		return "back"
+	if pos.distance_to(PREV_CENTER) <= NAV_R:
+		return "prev"
+	if pos.distance_to(NEXT_CENTER) <= NAV_R:
+		return "next"
+	if WOODBOX_RECT.has_point(pos):
+		return "guixu"
+	if pos.distance_to(WEIPAI_CENTER) <= BUTTON_R:
+		return "weipai"
+	if pos.distance_to(TANSUO_CENTER) <= BUTTON_R:
+		return "tansuo"
+	return ""
+
+func _show_toast(text: String) -> void:
+	_toast_text = text
+	_toast_time = TOAST_DURATION
+	queue_redraw()
+
+var _redraw_accum := 0.0
+
+func _process(delta: float) -> void:
+	var need_redraw := false
+	if _toast_time > 0.0:
+		_toast_time -= delta
+		if _toast_time <= 0.0:
+			_toast_time = 0.0
+			_toast_text = ""
+			need_redraw = true
+		elif int(_toast_time * 20.0) != int((_toast_time + delta) * 20.0):
+			need_redraw = true
+	# 视差滚动：山体（限频重绘，约 30fps，缓解卡顿）
+	_redraw_accum += delta
+	for i in range(_mountain_offsets.size()):
+		_mountain_offsets[i] = fmod(_mountain_offsets[i] + MOUNTAIN_SPEEDS[i] * delta, DESIGN_W * 2.0)
+	if _redraw_accum >= 0.033 or need_redraw:
+		_redraw_accum = 0.0
+		queue_redraw()
 
 func _draw_badge(cx: float, cy: float) -> void:
 	var r := 52.0
@@ -520,14 +695,18 @@ func _draw_bamboo_v(cx: float, top_y: float, chars: String, subtext: String) -> 
 	_text_center(font_hei, subtext, 14.0, Color("#6a5a3a"), Vector2(cx, top_y + h - 16.0))
 
 func _draw_button(cx: float, cy: float, r: float, text: String) -> void:
-	draw_circle(Vector2(cx, cy), r, Color("#3a352c"))
-	draw_circle(Vector2(cx, cy), r * 0.84, Color("#463f36"))
-	draw_circle(Vector2(cx, cy), r * 0.60, Color("#524a3e"))
+	# 按下反馈：轻微缩小
+	var pr := r
+	if (_pressed_key == "weipai" and text == "委派") or (_pressed_key == "tansuo" and text == "探索"):
+		pr = r * 0.94
+	draw_circle(Vector2(cx, cy), pr, Color("#3a352c"))
+	draw_circle(Vector2(cx, cy), pr * 0.84, Color("#463f36"))
+	draw_circle(Vector2(cx, cy), pr * 0.60, Color("#524a3e"))
 	# gold double ring
-	draw_arc(Vector2(cx, cy), r, 0.0, TAU, 72, GOLD, 4.5)
-	draw_arc(Vector2(cx, cy), r - 5.0, 0.0, TAU, 72, GOLD_DARK, 1.6)
+	draw_arc(Vector2(cx, cy), pr, 0.0, TAU, 72, GOLD, 4.5)
+	draw_arc(Vector2(cx, cy), pr - 5.0, 0.0, TAU, 72, GOLD_DARK, 1.6)
 	# ink cloud pattern
-	_cloud_pattern(Vector2(cx, cy), r * 0.62, Color("#d8b96a"))
+	_cloud_pattern(Vector2(cx, cy), pr * 0.62, Color("#d8b96a"))
 	_text_center(font_song, text, 27.0, Color("#f0e1bb"), Vector2(cx, cy))
 
 func _cloud_pattern(c: Vector2, s: float, color: Color) -> void:

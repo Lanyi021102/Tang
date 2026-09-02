@@ -3,11 +3,6 @@ extends Node2D
 # 唐长安城 2.5D 45°等距鸟瞰场景
 # Tang Chang'an — 45° isometric bird's-eye view, 3 zoom levels via mouse wheel.
 
-const DATA_PATH := "res://data/changan_points.json"
-const CONFIG_PATH := "res://config/llm_config.json"
-const KEPU_KB_PATH := "res://data/kepu_kb.json"
-const HISTORY_PATH := "res://data/history_timeline.json"
-const CODEX_PATH := "res://data/codex_kb.json"
 const MENU_SCENE := "res://scenes/MainMenu.tscn"
 const UI_SCRIPT := preload("res://scenes/ui_overlay.gd")
 const FANG_DIR := "res://assets/fang/"
@@ -18,6 +13,8 @@ const BUILDING_PANEL_RECT := Rect2(850.0, 30.0, 390.0, 660.0)
 const HIST_TIMELINE_RECT := Rect2(180.0, 652.0, 920.0, 54.0)
 const HIST_YEAR_MIN := 582
 const HIST_YEAR_MAX := 907
+# 右上角时间指示区域（地平线 + 太阳月亮）点击可切换时辰
+const TIME_AREA_RECT := Rect2(1112.0, 18.0, 166.0, 108.0)
 const SHICHEN := ["子时", "丑时", "寅时", "卯时", "辰时", "巳时", "午时", "未时", "申时", "酉时", "戌时", "亥时"]
 const CODEX_CATS := ["衣食住行", "建筑与城市规划", "历史"]
 
@@ -25,7 +22,58 @@ const CODEX_CATS := ["衣食住行", "建筑与城市规划", "历史"]
 const TW := 128.0
 const TH := 64.0
 const GRID_COLS := 12
-const GRID_ROWS := 9
+const GRID_ROWS := 13
+# 图谱项目坐标以历史城区中心为原点；游戏网格以左上角为原点。
+# 东侧坊在底图上比西侧多占一列，因此使用独立的横向偏移。
+const WEST_POINT_GRID_OFFSET := Vector2(5.0, 3.0)
+const EAST_POINT_GRID_OFFSET := Vector2(6.0, 3.0)
+
+# ==================== 唐长安城真实布局数据 ====================
+# 每步对应的像素尺寸（可调）
+const STEP := 0.1
+
+# 14 条东西大街路宽（步）—— 表格左侧奇数行 C 列
+const EW_STREET_WIDTHS := [19, 40, 155, 40, 120, 44, 40, 54, 55, 55, 54, 59, 39, 19]
+# 13 行坊的南北纵深（步）—— 表格左侧偶数行 C 列
+const EW_FANG_DEPTHS := [736, 737, 814, 814, 500, 544, 540, 515, 525, 530, 520, 530, 590]
+# 东西大街名称（与 EW_STREET_WIDTHS 对应）
+const EW_STREET_NAMES := [
+	"外郭城东西第一街", "外郭城东西第二街", "外郭城东西第三街", "外郭城东西第四街",
+	"外郭城东西第五街", "外郭城东西第六街", "外郭城东西第七街", "外郭城东西第八街",
+	"外郭城东西第九街", "外郭城东西第十街", "外郭城东西第十一街", "外郭城东西第十二街",
+	"外郭城东西第十三街", "外郭城东西第十四街",
+]
+
+# 11 条南北大街路宽（步）—— 表格底部 Row 30 偶数列
+const NS_STREET_WIDTHS := [20, 42, 63, 108, 63, 155, 67, 134, 68, 68, 25]
+# 10 列坊的东西宽度（步）—— 表格底部 Row 30 奇数列
+const NS_FANG_WIDTHS := [1115, 1033, 1020, 683, 558, 562, 700, 1022, 1032, 1125]
+# 南北大街名称（与 NS_STREET_WIDTHS 对应）
+const NS_STREET_NAMES := [
+	"朱雀门街西第五街", "朱雀门街西第四街", "朱雀门街西第三街", "朱雀门街西第二街",
+	"朱雀门街西第一街", "朱雀门街", "朱雀门街东第一街", "朱雀门街东第二街",
+	"朱雀门街东第三街", "朱雀门街东第四街", "朱雀门街东第五街",
+]
+
+# 每条东西大街两侧的坊名（西→东，10 个）
+# 街 1-4：中间 7 个为皇城，只渲染西侧 3 坊 + 东侧 3 坊
+# 街 5-14：全部 10 坊
+const EW_FANG_NAMES := [
+	["修真坊","安定坊","修德坊","","","","","光宅坊","长乐坊","入苑坊"],
+	["普宁坊","休祥坊","辅兴坊","","","","","永昌坊","太宁坊","兴宁坊"],
+	["义宁坊","金城坊","颁政坊","","","","","永兴坊","安兴坊","永嘉坊"],
+	["居德坊","醴泉坊","布政坊","","","","","崇仁坊","胜业坊","兴庆宫"],
+	["群贤坊","西市","延寿坊","太平坊","光禄坊","兴道坊","务本坊","平康坊","东市","道政坊"],
+	["怀德坊","西市","光德坊","通义坊","殖业坊","开化坊","崇义坊","宣阳坊","东市","常乐坊"],
+	["崇化坊","怀远坊","延康坊","兴化坊","丰乐坊","安仁坊","长兴坊","亲仁坊","安邑坊","靖恭坊"],
+	["丰邑坊","长寿坊","崇贤坊","崇德坊","安业坊","光福坊","永乐坊","永宁坊","宣平坊","新昌坊"],
+	["待贤坊","嘉会坊","延福坊","怀贞坊","崇业坊","靖善坊","靖安坊","永崇坊","升平坊","升道坊"],
+	["永和坊","永平坊","永安坊","宣义坊","永达坊","兰陵坊","安善坊","昭国坊","修行坊","立政坊"],
+	["常安坊","通轨坊","敦义坊","丰安坊","道德坊","开明坊","大业坊","晋昌坊","修政坊","敦化坊"],
+	["和平坊","归义坊","大通坊","昌明坊","光行坊","保宁坊","昌乐坊","通善坊","青龙坊","缺名"],
+	["永阳坊","昭行坊","大安坊","安乐坊","延祚坊","安义坊","安德坊","通济坊","曲池坊","芙蓉园"],
+]
+# 注：第 14 街（最后一街）南侧无坊，数据保留为空
 
 var font_song: Font
 var font_hei: Font
@@ -52,11 +100,12 @@ var _typing_visible := 0
 var _type_accum := 0.0
 var _type_speed := 45.0
 var _pending_intro := false
-var _fang_outline := PackedVector2Array()
-var _hover_outline := PackedVector2Array()
+var _fang_outline := PackedVector2Array()      # 选中坊描边（世界坐标）
+var _hover_outline := PackedVector2Array()     # 悬停坊描边（世界坐标）
 var _time_of_day := 10.0
 var _target_hour := 10.0
 var _current_year := 740
+var _year_display := 740.0  # 时间轴大圆滑动显示用（平滑插值到 _current_year）
 var _timeline: Array = []
 var _clock_open := false
 var _hist_open := false
@@ -64,6 +113,17 @@ var _hist_scroll := 0.0
 var _year_anim := false
 var _year_anim_t := 0.0
 var _year_to := 740
+var _year_dir := 1.0            # 年份跳转时太阳月亮转动方向：未来顺时针(+1)、过去逆时针(-1)
+var _time_anim_active := false  # 时辰切换平滑推进（始终顺时针）
+var _time_anim_from := 10.0
+var _time_anim_to := 10.0
+var _time_anim_t := 0.0
+var _time_anim_dur := 1.0
+var _left_bar_anim := 1.0            # 左侧功能栏动画：1=展开, 0=收起
+var _left_bar_anim_target := 1.0
+var _clock_popup_anim := 0.0         # 时辰弹窗下移动画：0=收起, 1=展开
+var _clock_popup_anim_target := 0.0
+var _year_time_from := 10.0          # 年份跳转时时钟起始时刻（用于非线性过渡）
 var _ambient: CanvasModulate
 var _bg: TextureRect
 var _day_lights: Array = []
@@ -104,16 +164,21 @@ var _codex_kb: Dictionary = {}
 var _codex_collected: Dictionary = {}
 var _codex_open := false
 var _codex_cat := 0
+var _codex_focus := 0
+var _codex_focus_anim := 0.0   # 焦点卡片滑动动画（非线性，向 _codex_focus 逼近）
+var _codex_dragging := false    # 正在拖拽滑动图鉴卡片
+var _codex_drag_x := 0.0
+var _codex_drag_focus := 0.0
 var _codex_scroll := 0.0
 
-var _http: HTTPRequest
 var _ui
 var _world
 var _npcs_node
 var _markers_node
+var _outline_layer
 
 # camera zoom state
-const ZOOM_LEVELS := [1.2, 3.2, 40.0]
+const ZOOM_LEVELS := [0.008, 0.04, 0.3]
 var _zoom_idx := 1
 var _target_zoom := 1.2
 var _target_pos := Vector2.ZERO
@@ -124,91 +189,131 @@ var _dragging := false
 var _drag_start := Vector2.ZERO
 var _moved := false
 
+# 左侧功能栏收起/展开状态
+var _left_bar_collapsed := false
+const LEFT_BAR_EXPANDED_W := 128.0
+const LEFT_BAR_COLLAPSED_W := 44.0
+
+# 底部时间轴收起/展开状态
+var _timeline_collapsed := false
+# 时间轴收起/展开动画插值：0=收起, 1=展开（非线性，每帧向目标逼近）
+var _timeline_anim := 1.0
+var _timeline_anim_target := 1.0
+# 选中坊描边揭示动画进度：0=无, 1=完全显示（非线性）
+var _outline_progress := 0.0
+var _outline_target := 0.0
+var _prev_fang := Vector2(-1, -1)
+
+# 时间轴收起/展开切换按钮区域（展开按钮在底部窄条中央；收起按钮在时间轴上方中央，两者同尺寸同视觉）
+func timeline_toggle_rect() -> Rect2:
+	if _timeline_collapsed:
+		return Rect2(560.0, 694.0, 160.0, 26.0)
+	return Rect2(560.0, 614.0, 160.0, 26.0)
+
+func toggle_timeline() -> void:
+	_timeline_collapsed = not _timeline_collapsed
+	_timeline_anim_target = 0.0 if _timeline_collapsed else 1.0
+	if _ui:
+		_ui.queue_redraw()
+# 收起/展开切换按钮区域（左下角）
+func left_bar_rect() -> Rect2:
+	var w := LEFT_BAR_EXPANDED_W if not _left_bar_collapsed else LEFT_BAR_COLLAPSED_W
+	return Rect2(0.0, 0.0, w, 648.0)
+
+func left_toggle_rect() -> Rect2:
+	if _left_bar_collapsed:
+		return Rect2(6.0, 560.0, 32.0, 44.0)
+	return Rect2(14.0, 560.0, 100.0, 40.0)
+
+func toggle_left_bar() -> void:
+	_left_bar_collapsed = not _left_bar_collapsed
+	_left_bar_anim_target = 0.0 if _left_bar_collapsed else 1.0
+	if _ui:
+		_ui.queue_redraw()
+
+# 同步 HUD 中左侧拦截条宽度与底部栏，收起时让出地图区域；收起时隐藏对应按钮
+func _sync_hud_guards() -> void:
+	var le := _ease_in_out_cubic(clampf(_left_bar_anim, 0.0, 1.0))
+	var w := lerpf(LEFT_BAR_EXPANDED_W, LEFT_BAR_COLLAPSED_W, 1.0 - le)
+	var hud := get_node_or_null("UI/HUD")
+	if hud == null:
+		return
+	var left_band = hud.get_node_or_null("LeftOpaqueBand")
+	if left_band:
+		left_band.offset_right = w
+	var left_guard = hud.get_node_or_null("LeftGuard")
+	if left_guard:
+		left_guard.offset_right = w
+	var show := le > 0.5
+	for n in ["BtnBack", "BtnNear", "BtnMid", "BtnFar", "BtnCodex"]:
+		var btn = hud.get_node_or_null(n)
+		if btn:
+			btn.visible = show
+			if btn is CanvasItem:
+				btn.modulate.a = clampf(le, 0.0, 1.0)
+	# 时间轴收起：底部深色带随动画收窄/展开，并淡出对应守卫条
+	var bottom_band = hud.get_node_or_null("BottomOpaqueBand")
+	if bottom_band:
+		var e := _ease_in_out_cubic(clampf(_timeline_anim, 0.0, 1.0))
+		bottom_band.offset_top = lerpf(690.0, 602.0, e)
+	var show_g := _timeline_anim > 0.05
+	for n in ["BottomUpperGuard", "BottomLeftGuard", "BottomRightGuard", "BottomLowerGuard"]:
+		var g = hud.get_node_or_null(n)
+		if g:
+			g.visible = show_g
+			if g is CanvasItem:
+				g.modulate.a = clampf(_timeline_anim, 0.0, 1.0)
+
 # grid -> iso
 func _iso(c: float, r: float) -> Vector2:
 	return Vector2((c - r) * TW * 0.5, (c + r) * TH * 0.5)
 
+
+func point_grid_position(p: Dictionary) -> Vector2:
+	if not p.has("grid_x") or not p.has("grid_y"):
+		return Vector2(6.0, 6.0)
+	var source_x := float(p.get("grid_x", 0.0))
+	var offset := EAST_POINT_GRID_OFFSET if source_x > 0.0 else WEST_POINT_GRID_OFFSET
+	return Vector2(
+		source_x + offset.x,
+		float(p.get("grid_y", 0.0)) + offset.y
+	)
+
 func _ready() -> void:
 	_setup_fonts()
-	_load_data()
-	_load_config()
-	_load_kepu_kb()
-	_load_timeline()
-	_load_codex()
+	_sync_from_data()
 	_build_fangs()
 	_build_camera()
 	_build_lights()
 	_build_world()
 	_build_ui()
 	_init_npcs()
-	_http = HTTPRequest.new()
-	add_child(_http)
-	_http.request_completed.connect(_on_http_done)
+	_sync_hud_guards()
+	NetworkManager.chat_response.connect(_on_chat_response)
 	_set_zoom(1, true)
 	_redraw_world()
 
 func _setup_fonts() -> void:
 	var kf := SystemFont.new()
-	kf.font_names = PackedStringArray(["Kaiti SC", "Kaiti", "STKaiti", "KaiTi", "Songti SC", "STHeiti", "PingFang SC"])
+	kf.font_names = PackedStringArray(["QIJIFALLBACK", "Kaiti SC", "Kaiti", "STKaiti", "KaiTi", "Songti SC", "STHeiti", "PingFang SC"])
 	kf.allow_system_fallback = true
 	font_song = kf
 	font_hei = kf
 
-func _load_data() -> void:
-	if not FileAccess.file_exists(DATA_PATH):
-		_error = "缺少数据文件：" + DATA_PATH
-		return
-	var txt := FileAccess.get_file_as_string(DATA_PATH)
-	var parsed: Variant = JSON.parse_string(txt)
-	if parsed is Dictionary and parsed.has("points"):
-		_points = parsed["points"]
-
-func _load_kepu_kb() -> void:
-	if FileAccess.file_exists(KEPU_KB_PATH):
-		var txt := FileAccess.get_file_as_string(KEPU_KB_PATH)
-		var parsed: Variant = JSON.parse_string(txt)
-		if parsed is Dictionary:
-			_kepu_kb = parsed
+func _sync_from_data() -> void:
+	_points = DataManager.points
+	_kepu_kb = DataManager.kepu_kb
+	_timeline = DataManager.timeline
+	_codex_kb = DataManager.codex_kb
+	_cfg = DataManager.llm_config
 	if _kepu_kb.is_empty():
 		_kepu_kb = KEPU
-
-func _load_timeline() -> void:
-	if FileAccess.file_exists(HISTORY_PATH):
-		var txt := FileAccess.get_file_as_string(HISTORY_PATH)
-		var parsed: Variant = JSON.parse_string(txt)
-		if parsed is Dictionary and parsed.has("timeline"):
-			_timeline = parsed["timeline"]
-
-func _load_codex() -> void:
 	_codex_collected = {}
-	if FileAccess.file_exists(CODEX_PATH):
-		var txt := FileAccess.get_file_as_string(CODEX_PATH)
-		var parsed: Variant = JSON.parse_string(txt)
-		if parsed is Dictionary:
-			_codex_kb = parsed
-			for cat in _codex_kb:
-				_codex_collected[cat] = []
-
-func _load_config() -> void:
-	_cfg = {
-		"api_base_url": "https://api.deepseek.com/v1",
-		"api_key": "",
-		"model": "deepseek-v4-flash",
-		"timeout_seconds": 30,
-		"system_prompt": "你是唐长安城知识图谱的科普讲解员，严格基于用户提供的知识库字段作答。首次收到条目时写一段120—160字的通俗中文介绍，并在介绍末尾用『——据《来源》』格式注明出处；后续收到玩家追问时直接回答该问题。始终区分史料记载与学者推测，不编造知识库之外的事实。",
-	}
-	if FileAccess.file_exists(CONFIG_PATH):
-		var txt := FileAccess.get_file_as_string(CONFIG_PATH)
-		var parsed: Variant = JSON.parse_string(txt)
-		if parsed is Dictionary:
-			for k in parsed:
-				_cfg[k] = parsed[k]
-	var env_key := OS.get_environment("LLM_API_KEY")
-	if env_key != "":
-		_cfg["api_key"] = env_key
-	var env_url := OS.get_environment("LLM_API_BASE_URL")
-	if env_url != "":
-		_cfg["api_base_url"] = env_url
+	for cat in _codex_kb:
+		_codex_collected[cat] = []
+	GameManager.current_year = _current_year
+	GameManager.time_of_day = _time_of_day
+	_year_display = float(_current_year)
 
 func _build_fangs() -> void:
 	_fang_tex.clear()
@@ -232,24 +337,31 @@ func _build_lights() -> void:
 	var mat := CanvasItemMaterial.new()
 	mat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	var lights := get_node("Lights")
-	_day_lights.append(_add_light(lights, tex, mat, _iso(6.0, 3.0), Vector2(1.5, 1.5), Color(1.0, 0.92, 0.74)))
-	_day_lights.append(_add_light(lights, tex, mat, _iso(3.0, 6.0), Vector2(1.2, 1.2), Color(1.0, 0.9, 0.7)))
-	_day_lights.append(_add_light(lights, tex, mat, _iso(9.0, 6.0), Vector2(1.2, 1.2), Color(1.0, 0.9, 0.7)))
+	_day_lights.append(_add_light(lights, tex, mat, _step_iso(4800.0, 3000.0), Vector2(150, 150), Color(1.0, 0.92, 0.74)))
+	_day_lights.append(_add_light(lights, tex, mat, _step_iso(2000.0, 5000.0), Vector2(120, 120), Color(1.0, 0.9, 0.7)))
+	_day_lights.append(_add_light(lights, tex, mat, _step_iso(7000.0, 5000.0), Vector2(120, 120), Color(1.0, 0.9, 0.7)))
 	# sun light (moves east -> west during the day)
-	_sun_light = _add_light(lights, tex, mat, _iso(6.0, 4.5), Vector2(2.4, 2.4), Color(1.0, 0.92, 0.74))
+	_sun_light = _add_light(lights, tex, mat, _step_iso(4831.5, 4334.0), Vector2(240, 240), Color(1.0, 0.92, 0.74))
 	# night candle lights inside every fang (small lamps)
 	var fnl := get_node("FangLights")
 	var rng2 := RandomNumberGenerator.new()
 	rng2.seed = 777
-	for r in range(1, GRID_ROWS):
-		for c in range(GRID_COLS):
-			if _occupied(c, r):
-				continue
-			var n := rng2.randi_range(1, 2)
+	for si in range(14):
+		if si >= EW_FANG_DEPTHS.size():
+			continue  # 第 14 街南侧无坊
+		for ci in range(10):
+			if si < EW_FANG_NAMES.size() and ci < EW_FANG_NAMES[si].size():
+				if EW_FANG_NAMES[si][ci] == "":
+					continue
+			var fx := _ns_x(ci) + float(NS_STREET_WIDTHS[ci])
+			var fy := _ew_y(si) + float(EW_STREET_WIDTHS[si])
+			var fw := float(NS_FANG_WIDTHS[ci])
+			var fh := float(EW_FANG_DEPTHS[si])
+			var n := rng2.randi_range(1, 3)
 			for k in range(n):
-				var lc := float(c) + rng2.randf_range(0.25, 0.75)
-				var lr := float(r) + rng2.randf_range(0.25, 0.75)
-				_fang_lights.append(_add_light(fnl, tex, mat, _iso(lc, lr), Vector2(0.5, 0.5), Color(1.0, 0.78, 0.45)))
+				var lc := fx + rng2.randf_range(0.2, 0.8) * fw
+				var lr := fy + rng2.randf_range(0.2, 0.8) * fh
+				_fang_lights.append(_add_light(fnl, tex, mat, _step_iso(lc, lr), Vector2(50, 50), Color(1.0, 0.78, 0.45)))
 	_ts_mat = get_node("TiltShift/ColorRect").material
 
 func _add_light(parent: Node2D, tex: Texture2D, mat: CanvasItemMaterial, pos: Vector2, scl: Vector2, color: Color) -> Sprite2D:
@@ -271,18 +383,130 @@ func _build_world() -> void:
 	_world.map = self
 	_npcs_node = get_node_or_null("World/NPCs")
 	_markers_node = get_node_or_null("World/Markers")
+	_outline_layer = get_node_or_null("World/OutlineLayer")
 	for layer in ["NPCs", "Markers"]:
 		var n = get_node_or_null("World/" + layer)
 		if n:
 			n.map = self
+	if _outline_layer:
+		_outline_layer.map = self
 	var buildings = get_node_or_null("World/Buildings")
 	if buildings:
 		for b in buildings.get_children():
 			b.map = self
-	var fangs = get_node_or_null("World/Fangs")
-	if fangs:
-		for f in fangs.get_children():
-			f.map = self
+	# ---- 动态创建坊和街道节点 ----
+	var FangScript = preload("res://scenes/fang_tile.gd")
+	var StreetScript = preload("res://scenes/street_tile.gd")
+	# 确保 Fangs 容器存在
+	var fangs_node = get_node_or_null("World/Fangs")
+	if fangs_node == null:
+		fangs_node = Node2D.new()
+		fangs_node.name = "Fangs"
+		get_node("World").add_child(fangs_node)
+	# 清空旧坊节点
+	for child in fangs_node.get_children():
+		child.queue_free()
+	# 确保 Streets 容器存在
+	var streets_node = get_node_or_null("World/Streets")
+	if streets_node == null:
+		streets_node = Node2D.new()
+		streets_node.name = "Streets"
+		get_node("World").add_child(streets_node)
+	# 清空旧街道节点
+	for child in streets_node.get_children():
+		child.queue_free()
+	# ---- 创建东西大街坊 (14 条街 × 10 列) ----
+	for si in range(14):
+		if si >= EW_FANG_DEPTHS.size():
+			break  # 第 14 街南侧无坊
+		var fang_ns_depth := float(EW_FANG_DEPTHS[si])  # 坊的南北纵深
+		var fy := _ew_y(si) + float(EW_STREET_WIDTHS[si])  # 坊行北边缘 y
+		for ci in range(10):
+			var fname: String = EW_FANG_NAMES[si][ci]
+			if fname == "":
+				continue
+			var fang_ew_width := float(NS_FANG_WIDTHS[ci])  # 坊的东西宽度
+			var fx := _ns_x(ci) + float(NS_STREET_WIDTHS[ci])  # 坊列西边缘 x
+			# 创建坊节点
+			var node := Node2D.new()
+			node.set_script(FangScript)
+			node.name = "坊-%d-%d" % [si, ci]
+			var center_sx := fx + fang_ew_width * 0.5
+			var center_sy := fy + fang_ns_depth * 0.5
+			node.position = _step_iso(center_sx, center_sy)
+			node.set("fang_name", fname)
+			node.set("fang_w", fang_ew_width * STEP)
+			node.set("fang_h", fang_ns_depth * STEP)
+			node.set("cell", Vector2(ci, si))
+			node.set("z_index", int(fy + fang_ns_depth * 0.5) + 1000)
+			fangs_node.add_child(node)
+			node.call("set_map_ref", self)
+	# ---- 创建东西向街道（只覆盖坊区域，不覆盖全城）----
+	var fang_area_ew := float(NS_FANG_WIDTHS.reduce(func(a, b): return a + b, 0)) + float(NS_STREET_WIDTHS.reduce(func(a, b): return a + b, 0))  # = 9663
+	var fang_area_ns := float(EW_FANG_DEPTHS.reduce(func(a, b): return a + b, 0)) + float(EW_STREET_WIDTHS.reduce(func(a, b): return a + b, 0)) - float(EW_STREET_WIDTHS[0]) - float(EW_STREET_WIDTHS[13])  # 不含南北边界路
+	for si in range(15):
+		var node := Node2D.new()
+		node.set_script(StreetScript)
+		var road_w: float
+		var road_len: float
+		var road_y: float
+		var sname: String
+		if si < 14:
+			road_w = float(EW_STREET_WIDTHS[si])
+			road_len = fang_area_ew
+			road_y = _ew_y(si)
+			sname = EW_STREET_NAMES[si]
+		else:
+			road_w = float(EW_STREET_WIDTHS[13])
+			road_len = fang_area_ew
+			road_y = _ew_y(13) + float(EW_FANG_DEPTHS[12])
+			sname = "外郭城南墙"
+		node.name = "EW街%d" % si
+		var center_sx := fang_area_ew * 0.5
+		var center_sy := road_y + road_w * 0.5
+		node.position = _step_iso(center_sx, center_sy)
+		node.set("tile_w", road_len * STEP)
+		node.set("tile_h", road_w * STEP)
+		node.set("tile_name", sname)
+		node.set("tile_type", "东西街道")
+		node.set("road_width", int(float(EW_STREET_WIDTHS[mini(si, 13)])))
+		node.set("road_length", int(road_len))
+		node.set("z_index", int(road_y) + 1000)
+		node.set("color", Color("#8fb8c9"))
+		streets_node.add_child(node)
+		node.call("set_map_ref", self)
+	# ---- 创建南北向街道（只覆盖坊区域）----
+	for ci in range(12):
+		var node := Node2D.new()
+		node.set_script(StreetScript)
+		var road_w: float
+		var road_len: float
+		var road_x: float
+		var sname: String
+		if ci < 11:
+			road_w = float(NS_STREET_WIDTHS[ci])
+			road_len = fang_area_ns
+			road_x = _ns_x(ci)
+			sname = NS_STREET_NAMES[ci]
+		else:
+			road_w = float(NS_STREET_WIDTHS[10])
+			road_len = fang_area_ns
+			road_x = _ns_x(10) + float(NS_FANG_WIDTHS[9])
+			sname = "外郭城东墙"
+		node.name = "NS街%d" % ci
+		var center_sx := road_x + road_w * 0.5
+		var center_sy := fang_area_ns * 0.5
+		node.position = _step_iso(center_sx, center_sy)
+		node.set("tile_w", road_w * STEP)
+		node.set("tile_h", road_len * STEP)
+		node.set("tile_name", sname)
+		node.set("tile_type", "南北街道")
+		node.set("road_width", int(float(NS_STREET_WIDTHS[mini(ci, 10)])))
+		node.set("road_length", int(road_len))
+		node.set("z_index", 100000)
+		node.set("color", Color("#7daab8"))
+		streets_node.add_child(node)
+		node.call("set_map_ref", self)
 
 func _redraw_world() -> void:
 	if _world:
@@ -307,21 +531,24 @@ func _set_zoom(idx: int, snap: bool = false) -> void:
 		_camera.zoom = Vector2(_target_zoom, _target_zoom)
 		_camera.position = _target_pos
 	_free_pan = false
+	GameManager.set_view_mode(["far", "mid", "near"][_zoom_idx])
 	if _ui:
 		_ui.queue_redraw()
 
 func _cam_pos_for(idx: int) -> Vector2:
+	# 城市中心：东西 4831.5 步，南北 4334 步
+	var center := _step_iso(4831.5, 4334.0)
 	match idx:
 		0:
-			return _iso(6.0, 4.5) + Vector2(0, 40)
+			return _iso(6.0, 6.5) + Vector2(0, 40)
 		2:
 			return _near_fang_center()
 		_:
-			return _iso(6.0, 3.2) + Vector2(0, 40)
+			return _iso(6.0, 6.5) + Vector2(0, 40)
 
 func _near_fang_center() -> Vector2:
-	# a representative 坊 (east-south residential ward)
-	return _iso(7.5, 7.5) + Vector2(0, 20)
+	# 默认放大到城南区域（坊密集区）
+	return _step_iso(4831.5, 6000.0)
 
 func _ease_out_cubic(t: float) -> float:
 	var u := 1.0 - t
@@ -358,50 +585,150 @@ func _update_fang_outline() -> void:
 	_hover_outline = PackedVector2Array()
 	if _hover_fang.x >= 0 and _hover_fang != _selected_fang:
 		_hover_outline = _outline_for(_hover_fang)
+	if _selected_fang != _prev_fang:
+		_prev_fang = _selected_fang
+		if _selected_fang.x >= 0:
+			_outline_progress = 0.0
+			_outline_target = 1.0
+		else:
+			_outline_target = 0.0
 	_ui.queue_redraw()
+	_refresh_outline_layer()
+
+# 更新时间轴收起/展开动画与选中描边动画（非线性）
+func _update_ui_anims(delta: float) -> void:
+	if absf(_timeline_anim - _timeline_anim_target) > 0.0005:
+		_timeline_anim = lerpf(_timeline_anim, _timeline_anim_target, delta * 7.0)
+		_sync_hud_guards()
+		if _ui:
+			_ui.queue_redraw()
+	if absf(_left_bar_anim - _left_bar_anim_target) > 0.0005:
+		_left_bar_anim = lerpf(_left_bar_anim, _left_bar_anim_target, delta * 8.0)
+		_sync_hud_guards()
+		if _ui:
+			_ui.queue_redraw()
+	if absf(_clock_popup_anim - _clock_popup_anim_target) > 0.0005:
+		_clock_popup_anim = lerpf(_clock_popup_anim, _clock_popup_anim_target, delta * 8.0)
+		if _ui:
+			_ui.queue_redraw()
+	if absf(_outline_progress - _outline_target) > 0.0005:
+		_outline_progress = lerpf(_outline_progress, _outline_target, delta * 6.0)
+		_refresh_outline_layer()
+
+# 选中描边揭示进度（已应用非线性缓动）
+func outline_reveal() -> float:
+	return _ease_in_out_cubic(clampf(_outline_progress, 0.0, 1.0))
+
+# 刷新描边层重绘
+func _refresh_outline_layer() -> void:
+	if _outline_layer:
+		_outline_layer.queue_redraw()
 
 func _outline_for(cell: Vector2) -> PackedVector2Array:
 	if cell.x < 0:
 		return PackedVector2Array()
-	var c := cell.x
-	var r := cell.y
+	var ci := int(cell.x)
+	var si := int(cell.y)
+	if si >= EW_FANG_DEPTHS.size() or ci >= 10:
+		return PackedVector2Array()
+	var fx := _ns_x(ci) + float(NS_STREET_WIDTHS[ci])
+	var fy := _ew_y(si) + float(EW_STREET_WIDTHS[si])
+	var fw := float(NS_FANG_WIDTHS[ci])
+	var fh := float(EW_FANG_DEPTHS[si])
 	var corners := PackedVector2Array([
-		_iso(c, r),
-		_iso(c + 1.0, r),
-		_iso(c + 1.0, r + 1.0),
-		_iso(c, r + 1.0),
+		_step_iso(fx, fy),
+		_step_iso(fx + fw, fy),
+		_step_iso(fx + fw, fy + fh),
+		_step_iso(fx, fy + fh),
 	])
 	var out := PackedVector2Array()
 	for p in corners:
-		out.append(_world_to_screen(p))
-	out.append(_world_to_screen(corners[0]))
+		out.append(p)
+	out.append(corners[0])
 	return out
 
 func set_time(hour: float, smooth := false) -> void:
-	_target_hour = clampf(hour, 0.0, 24.0)
+	var target := clampf(hour, 0.0, 24.0)
+	_target_hour = target
+	if _year_anim:
+		# 手动调时打断年份跳转动画：年份落定，时钟归用户控制
+		_year_anim = false
+		_current_year = _year_to
+		_year_display = float(_current_year)
+		GameManager.set_year(_current_year)
 	if not smooth:
-		_time_of_day = _target_hour
+		_time_of_day = target
+		_time_anim_active = false
+	else:
+		var from := _time_of_day
+		if shichen_index(target) == shichen_index(from):
+			# 点击当前时辰：直接到位，不空转
+			_time_of_day = target
+			_time_anim_active = false
+		else:
+			# 始终顺时针推进：目标不早于当前时刻，必要时绕一圈（+24h）
+			var to := target
+			if to <= from:
+				to += 24.0
+			_time_anim_from = from
+			_time_anim_to = to
+			_time_anim_t = 0.0
+			_time_anim_dur = maxf(0.9, (to - from) / 24.0 * 3.0)  # 全圈约3秒，非线性缓动
+			_time_anim_active = true
+	GameManager.set_time(_target_hour)
 	_ui.queue_redraw()
 
 func _update_time(delta: float) -> void:
 	if _year_anim:
 		_year_anim_t += delta
-		_time_of_day = fmod(_time_of_day + delta * 26.0, 24.0)
+		# 时钟随年份跳转做非线性过渡（和时辰切换一致），而非匀速转动
+		var t := clampf(_year_anim_t / 1.5, 0.0, 1.0)
+		var e := _ease_in_out_cubic(t)
+		_time_of_day = fposmod(_year_time_from + (fmod(_target_hour - _year_time_from, 24.0)) * e, 24.0)
+		# 时钟转动的同时，时间轴大圆同步滑向目标年份
+		_year_display = lerpf(_year_display, float(_year_to), delta * 5.0)
 		if _year_anim_t >= 1.5:
 			_year_anim = false
 			_current_year = _year_to
+			_year_display = float(_current_year)
 			_time_of_day = _target_hour
+			GameManager.set_year(_current_year)
+			GameManager.set_time(_time_of_day)
 			_ui.queue_redraw()
+	elif _time_anim_active:
+		_time_anim_t += delta
+		var t := clampf(_time_anim_t / _time_anim_dur, 0.0, 1.0)
+		var e := _ease_in_out_cubic(t)
+		_time_of_day = fposmod(lerpf(_time_anim_from, _time_anim_to, e), 24.0)
+		_ui.queue_redraw()
+		if t >= 1.0:
+			_time_anim_active = false
+			_time_of_day = fposmod(_time_anim_to, 24.0)
 	elif absf(_time_of_day - _target_hour) > 0.02:
 		_time_of_day = lerpf(_time_of_day, _target_hour, delta * 4.0)
+		_ui.queue_redraw()
+	else:
+		_time_of_day = _target_hour
+	# 非动画状态（如直接点击时间轴事件点）：大圆平滑滑动到目标年份
+	if not _year_anim and absf(_year_display - float(_current_year)) > 0.05:
+		_year_display = lerpf(_year_display, float(_current_year), delta * 5.0)
+		if absf(_year_display - float(_current_year)) <= 0.05:
+			_year_display = float(_current_year)
 		_ui.queue_redraw()
 
 func _jump_to_year(year: int) -> void:
 	_year_to = clampi(year, HIST_YEAR_MIN, HIST_YEAR_MAX)
+	# 过去（更早年份）：太阳月亮逆时针转；未来（更晚年份）：顺时针转
+	_year_dir = -1.0 if _year_to < _current_year else 1.0
 	_year_anim = true
 	_year_anim_t = 0.0
-	_hist_open = false
+	_year_time_from = _time_of_day
+	_time_anim_active = false
 	_ui.queue_redraw()
+
+# 时间轴大圆当前显示年份（平滑插值中）
+func display_year() -> float:
+	return _year_display
 
 func shichen_index(hour: float) -> int:
 	return (int(hour) % 24) / 2
@@ -424,7 +751,11 @@ func nearby_event_title(year: int) -> String:
 	return best
 
 func clock_popup_rect() -> Rect2:
-	return Rect2(1128.0, 108.0, 132.0, SHICHEN.size() * 26.0 + 14.0)
+	return Rect2(1124.0, 132.0, 132.0, SHICHEN.size() * 26.0 + 14.0)
+
+func shichen_rect(i: int) -> Rect2:
+	var pr := clock_popup_rect()
+	return Rect2(pr.position.x + 8.0, pr.position.y + 10.0 + float(i) * 26.0, pr.size.x - 16.0, 22.0)
 
 func group_chat_close_rect() -> Rect2:
 	return Rect2(GROUP_CHAT_RECT.end.x - 34.0, GROUP_CHAT_RECT.position.y + 7.0, 24.0, 24.0)
@@ -438,28 +769,105 @@ func followup_button_rect(i: int) -> Rect2:
 	var bw := (BUILDING_PANEL_RECT.size.x - 28.0 - 16.0) / 3.0
 	return Rect2(bx + float(i) * (bw + 8.0), by, bw, 44.0)
 
-func shichen_rect(i: int) -> Rect2:
-	var pr := clock_popup_rect()
-	return Rect2(pr.position.x + 8.0, pr.position.y + 10.0 + float(i) * 26.0, pr.size.x - 16.0, 22.0)
-
 func hist_popup_rect() -> Rect2:
-	return Rect2(360.0, 100.0, 560.0, 520.0)
+	return Rect2(356.0, 70.0, 568.0, 500.0)
 
 func hist_event_rect(i: int) -> Rect2:
 	var pr := hist_popup_rect()
 	return Rect2(pr.position.x + 16.0, pr.position.y + 56.0 + float(i) * 44.0 - _hist_scroll, pr.size.x - 32.0, 40.0)
 
+# 大事记列表最大滚动量（保证最后一项不滚出可视区）
+func hist_max_scroll() -> float:
+	var pr := hist_popup_rect()
+	var list_h := pr.size.y - 56.0 - 12.0
+	var content_h := float(_timeline.size()) * 44.0
+	return maxf(0.0, content_h - list_h)
+
+# 时间轴某事件点在屏幕上的位置（与 ui_overlay._draw_hist_timeline 的 bar 计算一致）
+func timeline_event_screen_pos(i: int) -> Vector2:
+	var r: Rect2 = HIST_TIMELINE_RECT
+	var bar := Rect2(r.position.x + 18.0, r.position.y + 18.0, r.size.x - 36.0, 6.0)
+	var t := (float(_timeline[i]["year"]) - float(HIST_YEAR_MIN)) / float(HIST_YEAR_MAX - HIST_YEAR_MIN)
+	return Vector2(bar.position.x + t * bar.size.x, bar.get_center().y)
+
+# 根据屏幕 x 坐标找到最近的事件点索引（容差约 14px），找不到返回 -1
+func timeline_event_at_x(x: float) -> int:
+	var best := -1
+	var best_dist := 14.0
+	for i in range(_timeline.size()):
+		var d := absf(timeline_event_screen_pos(i).x - x)
+		if d < best_dist:
+			best_dist = d
+			best = i
+	return best
+
 func codex_panel_rect() -> Rect2:
-	return Rect2(300.0, 90.0, 680.0, 540.0)
+	var vp := get_viewport_rect()
+	var w := 720.0
+	var h := 600.0
+	return Rect2((vp.size.x - w) * 0.5, 60.0, w, h)
 
 func codex_cat_rect(i: int) -> Rect2:
 	var pr := codex_panel_rect()
-	var w := (pr.size.x - 40.0) / 3.0
-	return Rect2(pr.position.x + 16.0 + float(i) * w, pr.position.y + 52.0, w - 8.0, 36.0)
+	var w := (pr.size.x - 48.0) / 3.0
+	return Rect2(pr.position.x + 18.0 + float(i) * w, pr.position.y + 70.0, w - 7.0, 34.0)
 
 func codex_entry_rect(i: int) -> Rect2:
 	var pr := codex_panel_rect()
-	return Rect2(pr.position.x + 20.0, pr.position.y + 104.0 + float(i) * 46.0 - _codex_scroll, pr.size.x - 40.0, 42.0)
+	return Rect2(pr.position.x + 20.0, pr.position.y + 120.0 + float(i) * 52.0 - _codex_scroll, pr.size.x - 40.0, 46.0)
+
+func codex_detail_rect() -> Rect2:
+	var pr := codex_panel_rect()
+	return Rect2(pr.position.x + 20.0, pr.position.y + 326.0, pr.size.x - 40.0, pr.size.y - 346.0)
+
+# 图鉴条目列表最大滚动量（保证最后一项不滚出可视区）
+func codex_max_scroll() -> float:
+	var pr := codex_panel_rect()
+	var detail_rect := codex_detail_rect()
+	var list_top: float = pr.position.y + 116.0
+	var list_h := detail_rect.position.y - 8.0 - list_top
+	var content_h := float(codex_entries(_codex_cat).size()) * 52.0
+	return maxf(0.0, content_h - list_h)
+
+# ---- 图鉴知识卡片轮播 ----
+func codex_card_size() -> Vector2:
+	return Vector2(300.0, 450.0)  # 2:3 竖卡
+
+func codex_card_stride() -> float:
+	return codex_card_size().x + 28.0
+
+func codex_card_area() -> Rect2:
+	var pr := codex_panel_rect()
+	var top: float = pr.position.y + 132.0
+	return Rect2(pr.position.x + 10.0, top, pr.size.x - 20.0, pr.end.y - 16.0 - top)
+
+func codex_card_count() -> int:
+	return codex_entries(_codex_cat).size()
+
+# 焦点卡片滑动动画（非线性缓动）
+func _update_codex_carousel(delta: float) -> void:
+	var target := float(_codex_focus)
+	if not _codex_dragging:
+		_codex_focus_anim = lerpf(_codex_focus_anim, target, delta * 6.0)
+	else:
+		_codex_focus_anim = clampf(_codex_drag_focus, 0.0, maxf(0.0, float(codex_card_count() - 1)))
+
+# 给定屏幕坐标，返回命中的图鉴卡片索引（-1 为未命中）
+func codex_card_at(pos: Vector2) -> int:
+	var area := codex_card_area()
+	var csize := codex_card_size()
+	var stride := codex_card_stride()
+	var count := codex_card_count()
+	if count <= 0:
+		return -1
+	var center := Vector2(area.get_center().x, area.get_center().y)
+	for i in range(count):
+		var d := _codex_focus_anim - float(i)
+		var cx := center.x - d * stride
+		var card := Rect2(Vector2(cx - csize.x * 0.5, center.y - csize.y * 0.5), csize)
+		if card.has_point(pos):
+			return i
+	return -1
 
 func codex_collected_count(cat: int) -> int:
 	if cat < 0 or cat >= CODEX_CATS.size():
@@ -478,6 +886,32 @@ func codex_collected_list(cat: int) -> Array:
 	if cat < 0 or cat >= CODEX_CATS.size():
 		return []
 	return _codex_collected.get(CODEX_CATS[cat], [])
+
+func _is_screen_ui_band(p: Vector2) -> bool:
+	var vp := get_viewport_rect()
+	var w := LEFT_BAR_EXPANDED_W if not _left_bar_collapsed else LEFT_BAR_COLLAPSED_W
+	if p.x <= w:
+		return true
+	if not _timeline_collapsed and p.y >= vp.size.y - 118.0:
+		return true
+	return false
+
+func _is_blocked_screen_ui_band(p: Vector2) -> bool:
+	return _is_screen_ui_band(p) and not HIST_TIMELINE_RECT.has_point(p)
+
+# 知识卡片展开时，其面板区域应拦截对背景地图的点击（但面板内的关闭/追问按钮仍可点）
+func _is_panel_blocking(p: Vector2) -> bool:
+	if _selected.is_empty():
+		return false
+	if not BUILDING_PANEL_RECT.has_point(p):
+		return false
+	# 关闭按钮与追问按钮区域不拦截，让事件继续进入 _handle_click 处理
+	if building_close_rect().has_point(p):
+		return false
+	for i in range(3):
+		if followup_button_rect(i).has_point(p):
+			return false
+	return true
 
 func _ambient_color(hour: float) -> Color:
 	for i in range(_day_hours.size() - 1):
@@ -530,10 +964,10 @@ func _update_lighting() -> void:
 		if t < 0.0 or t > 1.0:
 			_sun_light.modulate.a = 0.0
 		else:
-			var cx := _iso(6.0, 4.5).x
-			var cy := _iso(6.0, 4.5).y
-			var sx := lerpf(820.0, -820.0, t)
-			var sy := -absf(sin(t * PI)) * 680.0
+			var cx := _step_iso(4831.5, 4334.0).x
+			var cy := _step_iso(4831.5, 4334.0).y
+			var sx := lerpf(82000.0, -82000.0, t)
+			var sy := -absf(sin(t * PI)) * 68000.0
 			_sun_light.position = Vector2(cx + sx, cy + sy)
 			var warm := clampf(1.0 - absf(t - 0.5) * 1.6, 0.3, 1.0)
 			_sun_light.modulate = Color(1.0, 0.82 + 0.12 * warm, 0.58 + 0.26 * warm, 0.15 + 0.5 * sun)
@@ -566,7 +1000,7 @@ func _process(delta: float) -> void:
 		return
 	if _follow_group >= 0 and _follow_group < _groups.size():
 		var fg: Dictionary = _groups[_follow_group]
-		_target_pos = _iso(fg["c"], fg["r"])
+		_target_pos = _step_iso(fg["c"], fg["r"])
 		_target_zoom = ZOOM_LEVELS[2]
 	if _cam_anim:
 		_cam_anim_t += delta
@@ -603,6 +1037,8 @@ func _process(delta: float) -> void:
 	_update_group_chat(delta)
 	_update_hover()
 	_update_fang_outline()
+	_update_ui_anims(delta)
+	_update_codex_carousel(delta)
 	_update_time(delta)
 	_update_lighting()
 	_update_tilt_shift(delta)
@@ -647,11 +1083,25 @@ func _update_group_chat(delta: float) -> void:
 
 func _update_hover() -> void:
 	var mp := get_viewport().get_mouse_position()
-	var world := _camera.get_canvas_transform().affine_inverse() * mp
-	var f := _fang_at(world)
+	var f := Vector2(-1, -1)
+	if not _is_pointer_on_ui(mp):
+		var world := _camera.get_canvas_transform().affine_inverse() * mp
+		f = _fang_at(world)
 	if f != _hover_fang:
 		_hover_fang = f
 		_ui.queue_redraw()
+
+# 鼠标是否悬停在任何 UI（按钮/面板/时间轴/底部栏）之上：此时不触发地图坊 hover
+func _is_pointer_on_ui(p: Vector2) -> bool:
+	if _is_blocked_screen_ui_band(p):
+		return true
+	if TIME_AREA_RECT.has_point(p):
+		return true
+	if HIST_TIMELINE_RECT.has_point(p) and not _timeline_collapsed:
+		return true
+	if _ui != null and _ui._detect_ui_hover() != "":
+		return true
+	return false
 
 # ==================== world drawing (moved to world.gd) ====================
 
@@ -687,7 +1137,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
 			var wmb := event as InputEventMouseButton
 			if _codex_open and codex_panel_rect().has_point(wmb.position):
-				_codex_scroll = maxf(0.0, _codex_scroll - 40.0)
+				_codex_focus = clampi(_codex_focus - 1, 0, maxi(0, codex_card_count() - 1))
 				_ui.queue_redraw()
 			elif _hist_open and hist_popup_rect().has_point(wmb.position):
 				_hist_scroll = maxf(0.0, _hist_scroll - 40.0)
@@ -695,35 +1145,67 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif _panel_has_point(wmb.position):
 				_chat_scroll = maxf(0.0, _chat_scroll - 40.0)
 				_ui.queue_redraw()
+			elif _is_screen_ui_band(wmb.position):
+				return
 			else:
 				_set_zoom(_zoom_idx + 1)
 			return
 		if event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
 			var wmb2 := event as InputEventMouseButton
 			if _codex_open and codex_panel_rect().has_point(wmb2.position):
-				_codex_scroll += 40.0
+				_codex_focus = clampi(_codex_focus + 1, 0, maxi(0, codex_card_count() - 1))
 				_ui.queue_redraw()
 			elif _hist_open and hist_popup_rect().has_point(wmb2.position):
-				_hist_scroll += 40.0
+				_hist_scroll = minf(_hist_scroll + 40.0, hist_max_scroll())
 				_ui.queue_redraw()
 			elif _panel_has_point(wmb2.position):
 				_chat_scroll += 40.0
 				_ui.queue_redraw()
+			elif _is_screen_ui_band(wmb2.position):
+				return
 			else:
 				_set_zoom(_zoom_idx - 1)
 			return
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			var mb := event as InputEventMouseButton
 			if mb.pressed:
+				if left_toggle_rect().has_point(mb.position):
+					toggle_left_bar()
+					return
+				if _codex_open and codex_card_area().has_point(mb.position) and codex_card_count() > 0:
+					# 图鉴知识卡片拖拽滑动
+					_codex_dragging = true
+					_codex_drag_focus = _codex_focus_anim
+					_codex_drag_x = mb.position.x
+					_dragging = false
+					_moved = false
+					return
+				if _is_screen_ui_band(mb.position) or _is_panel_blocking(mb.position):
+					_dragging = false
+					_moved = false
+					_drag_start = mb.position
+					return
 				_dragging = true
 				_drag_start = mb.position
 				_moved = false
 			else:
 				_dragging = false
+				if _codex_dragging:
+					_codex_dragging = false
+					_codex_focus = clampi(int(round(_codex_drag_focus)), 0, maxi(0, codex_card_count() - 1))
+					_ui.queue_redraw()
+					return
 				if not _moved:
 					_handle_click(mb.position)
 		return
 	if event is InputEventMouseMotion:
+		if _codex_dragging:
+			var mmd := event as InputEventMouseMotion
+			var stride: float = codex_card_stride()
+			if stride > 0.0:
+				_codex_drag_focus -= mmd.relative.x / stride
+			_ui.queue_redraw()
+			return
 		if _dragging:
 			var mm2 := event as InputEventMouseMotion
 			if mm2.position.distance_to(_drag_start) > 6.0:
@@ -740,14 +1222,32 @@ func _panel_has_point(p: Vector2) -> bool:
 	return BUILDING_PANEL_RECT.has_point(p)
 
 func _handle_click(screen_pos: Vector2) -> void:
+	if left_toggle_rect().has_point(screen_pos):
+		toggle_left_bar()
+		return
 	if _clock_open:
-		_clock_open = false
-		_ui.queue_redraw()
+		# 时辰选择弹窗打开时：点时辰项切换时间，点弹窗外关闭
+		var was_open := _clock_open
 		if clock_popup_rect().has_point(screen_pos):
 			for i in range(SHICHEN.size()):
 				if shichen_rect(i).has_point(screen_pos):
 					set_time(float(i * 2), true)
+					_clock_open = false
+					_clock_popup_anim_target = 0.0
+					_ui.queue_redraw()
 					return
+			return
+		_clock_open = false
+		_clock_popup_anim_target = 0.0
+		_ui.queue_redraw()
+		return
+	if TIME_AREA_RECT.has_point(screen_pos):
+		# 点击时间指示区域：弹出时辰选择卡片
+		_clock_open = true
+		_clock_popup_anim = 0.0
+		_clock_popup_anim_target = 1.0
+		_hist_open = false
+		_ui.queue_redraw()
 		return
 	if _hist_open:
 		_hist_open = false
@@ -760,21 +1260,44 @@ func _handle_click(screen_pos: Vector2) -> void:
 		return
 	if _codex_open:
 		if codex_panel_rect().has_point(screen_pos):
+			# 关闭按钮
+			var pr: Rect2 = codex_panel_rect()
+			var close_r := Rect2(pr.end.x - 44.0, pr.position.y + 12.0, 28.0, 28.0)
+			if close_r.has_point(screen_pos):
+				_codex_open = false
+				_ui.queue_redraw()
+				return
 			for i in range(3):
 				if codex_cat_rect(i).has_point(screen_pos):
 					_codex_cat = i
+					_codex_focus = 0
 					_codex_scroll = 0.0
 					_ui.queue_redraw()
 					return
+			var ci := codex_card_at(screen_pos)
+			if ci >= 0:
+				_codex_focus = ci
+				_ui.queue_redraw()
+				return
 			return
 		_codex_open = false
 		_ui.queue_redraw()
 		return
 	if HIST_TIMELINE_RECT.has_point(screen_pos):
+		if _timeline_collapsed:
+			return
+		# 点击时间轴：先打开大事记卡片，再按事件点滚动定位并跳转年份
 		_hist_open = true
-		_clock_open = false
+		var ev_idx := timeline_event_at_x(screen_pos.x)
+		if ev_idx >= 0:
+			# 点击具体大事记点：滚动定位 + 年份动画跳转（时钟/日月实时流转 + 大圆滑动）
+			_hist_scroll = maxf(0.0, float(ev_idx) * 44.0 - 6.0)
+			_jump_to_year(int(_timeline[ev_idx]["year"]))
+			return
 		_hist_scroll = 0.0
 		_ui.queue_redraw()
+		return
+	if _is_blocked_screen_ui_band(screen_pos):
 		return
 	if _group_chat_open and group_chat_close_rect().has_point(screen_pos):
 		_group_chat_open = false
@@ -804,8 +1327,12 @@ func _handle_click(screen_pos: Vector2) -> void:
 	if fang.x >= 0:
 		_selected_fang = fang
 		_select(_fang_data(fang.x, fang.y))
-		_zoom_idx = 2
-		_start_cam_anim(ZOOM_LEVELS[2], _iso(fang.x + 0.5, fang.y + 0.5))
+		_redraw_world()
+		return
+	var street := _street_at(world_pos)
+	if not street.is_empty():
+		_selected_fang = Vector2(-1, -1)
+		_select(_street_data(street))
 		_redraw_world()
 		return
 	if not _selected.is_empty():
@@ -814,44 +1341,158 @@ func _handle_click(screen_pos: Vector2) -> void:
 		_group_chat_open = false
 		_ui.queue_redraw()
 
-func _fang_at(world_pos: Vector2) -> Vector2:
-	var x := world_pos.x
-	var y := world_pos.y
-	var C := (x / (TW * 0.5) + y / (TH * 0.5)) * 0.5
-	var R := (y / (TH * 0.5) - x / (TW * 0.5)) * 0.5
-	var c := int(floor(C))
-	var r := int(floor(R))
-	if c < 0 or c >= GRID_COLS or r < 0 or r >= GRID_ROWS:
-		return Vector2(-1, -1)
-	if _occupied(c, r):
-		return Vector2(-1, -1)
-	return Vector2(c, r)
+# 世界坐标 → 步坐标（逆 ISO）
+func _world_to_step(world_pos: Vector2) -> Vector2:
+	var sx := (world_pos.x / (STEP * 64.0) + world_pos.y / (STEP * 32.0)) * 0.5
+	var sy := (world_pos.y / (STEP * 32.0) - world_pos.x / (STEP * 64.0)) * 0.5
+	return Vector2(sx, sy)
 
+# 矩形点击检测：世界坐标 → 命中的坊 (si, ci)，未命中返回 Vector2(-1, -1)
+func _fang_at(world_pos: Vector2) -> Vector2:
+	var step := _world_to_step(world_pos)
+	var sx := step.x
+	var sy := step.y
+	# 查找所在坊行
+	var fang_row := -1
+	for si in range(EW_FANG_DEPTHS.size()):
+		var fy := _ew_y(si) + float(EW_STREET_WIDTHS[si])
+		var fh := float(EW_FANG_DEPTHS[si])
+		if sy >= fy and sy < fy + fh:
+			fang_row = si
+			break
+	if fang_row < 0:
+		return Vector2(-1, -1)
+	# 查找所在坊列
+	var fang_col := -1
+	for ci in range(10):
+		var fx := _ns_x(ci) + float(NS_STREET_WIDTHS[ci])
+		var fw := float(NS_FANG_WIDTHS[ci])
+		if sx >= fx and sx < fx + fw:
+			fang_col = ci
+			break
+	if fang_col < 0:
+		return Vector2(-1, -1)
+	# 检查是否为皇城空位
+	if fang_row < EW_FANG_NAMES.size() and fang_col < EW_FANG_NAMES[fang_row].size():
+		if EW_FANG_NAMES[fang_row][fang_col] == "":
+			return Vector2(-1, -1)
+	return Vector2(fang_col, fang_row)
+
+# 坊数据（用于点击后显示卡片）
 func _fang_data(c: float, r: float) -> Dictionary:
 	var ci := int(c)
-	var ri := int(r)
-	var name := _fang_name_of(ci, ri)
+	var si := int(r)
+	var fname: String = ""
+	if si < EW_FANG_NAMES.size() and ci < EW_FANG_NAMES[si].size():
+		fname = EW_FANG_NAMES[si][ci]
+	if fname == "":
+		fname = "里坊"
+	var ew_size := int(float(NS_FANG_WIDTHS[ci]))    # 东西尺寸
+	var ns_size := int(float(EW_FANG_DEPTHS[si]))    # 南北尺寸
+	var ew_street_name: String = EW_STREET_NAMES[si] if si < EW_STREET_NAMES.size() else ""
+	var ns_street_name: String = NS_STREET_NAMES[ci] if ci < NS_STREET_NAMES.size() else ""
 	return {
-		"key": "FANG-%d-%d" % [ci, ri],
-		"name": name,
+		"key": "FANG-%d-%d" % [ci, si],
+		"name": fname,
 		"trad": "",
 		"type": "坊",
-		"zone": "坊",
-		"description": "唐长安城的一座里坊，四周环以坊墙，坊内由十字街分为四区，分布着宅第、寺观与店铺。",
-		"location": "外郭城第%d列·第%d行" % [ci, ri],
+		"zone": "外郭城",
+		"description": "%s，东西约%d步，南北约%d步。北侧为%s，东侧为%s。" % [fname, ew_size, ns_size, ew_street_name, ns_street_name],
+		"location": "%s · 第%d列" % [ew_street_name, ci + 1],
 		"function": "居住与坊内生活",
 		"built": "",
 		"aliases": "",
 		"quote": "",
 		"source": "《唐两京城坊考》卷一",
+		"ew_size": ew_size,
+		"ns_size": ns_size,
+		"north_road": ew_street_name,
+		"east_road": ns_street_name,
 	}
 
 func _fang_name_of(c: int, r: int) -> String:
-	if _world:
-		var n = _world.get_node_or_null("Fangs/坊-%d-%d" % [c, r])
-		if n and String(n.get("fang_name")) != "":
-			return String(n.get("fang_name"))
-	return "里坊（第%d列·第%d行）" % [c, r]
+	if r < EW_FANG_NAMES.size() and c < EW_FANG_NAMES[r].size():
+		var n: String = EW_FANG_NAMES[r][c]
+		if n != "":
+			return n
+	return "里坊"
+
+# 街道点击检测：返回 ["ew", idx] 或 ["ns", idx] 或空数组
+func _street_at(world_pos: Vector2) -> Array:
+	var step := _world_to_step(world_pos)
+	var sx := step.x
+	var sy := step.y
+	# 检查东西向街道（15 条：街0-13 + 南边界街14）
+	for si in range(15):
+		var road_y: float
+		var road_w: float
+		if si < 14:
+			road_y = _ew_y(si)
+			road_w = float(EW_STREET_WIDTHS[si])
+		else:
+			road_y = _ew_y(13) + float(EW_FANG_DEPTHS[12])
+			road_w = float(EW_STREET_WIDTHS[13])
+		if sy >= road_y and sy < road_y + road_w:
+			return ["ew", si]
+	# 检查南北向街道（12 条：街0-10 + 东边界街11）
+	for ci in range(12):
+		var road_x: float
+		var road_w: float
+		if ci < 11:
+			road_x = _ns_x(ci)
+			road_w = float(NS_STREET_WIDTHS[ci])
+		else:
+			road_x = _ns_x(10) + float(NS_FANG_WIDTHS[9])
+			road_w = float(NS_STREET_WIDTHS[10])
+		if sx >= road_x and sx < road_x + road_w:
+			return ["ns", ci]
+	return []
+
+# 街道数据（用于点击后显示卡片）
+func _street_data(info: Array) -> Dictionary:
+	var dir: String = info[0]
+	var idx: int = info[1]
+	if dir == "ew" and idx < EW_STREET_WIDTHS.size():
+		var w: int = int(float(EW_STREET_WIDTHS[idx]))
+		var l: int = 9663
+		var sname: String = EW_STREET_NAMES[idx] if idx < EW_STREET_NAMES.size() else "外郭城南墙"
+		return {
+			"key": "STREET-EW-%d" % idx,
+			"name": sname,
+			"trad": "",
+			"type": "街道",
+			"zone": "外郭城",
+			"description": "%s，路宽%d步，贯穿东西，全长%d步。" % [sname, w, l],
+			"location": sname,
+			"function": "城市交通干道",
+			"built": "隋开皇二年（582年）",
+			"aliases": "",
+			"quote": "",
+			"source": "《唐两京城坊考》卷一",
+			"road_width": w,
+			"road_length": l,
+		}
+	elif dir == "ns" and idx < NS_STREET_WIDTHS.size():
+		var w: int = int(float(NS_STREET_WIDTHS[idx]))
+		var l: int = 8668
+		var sname: String = NS_STREET_NAMES[idx] if idx < NS_STREET_NAMES.size() else "外郭城东墙"
+		return {
+			"key": "STREET-NS-%d" % idx,
+			"name": sname,
+			"trad": "",
+			"type": "街道",
+			"zone": "外郭城",
+			"description": "%s，路宽%d步，贯穿南北，全长%d步。" % [sname, w, l],
+			"location": sname,
+			"function": "城市交通干道",
+			"built": "隋开皇二年（582年）",
+			"aliases": "",
+			"quote": "",
+			"source": "《唐两京城坊考》卷一",
+			"road_width": w,
+			"road_length": l,
+		}
+	return {}
 
 # ==================== NPC groups ====================
 const KEPU := {
@@ -916,15 +1557,16 @@ func _member_offset(size: int, idx: int) -> Vector2:
 
 func _gen_route(rng: RandomNumberGenerator) -> Array:
 	var pts: Array = []
-	var c := rng.randi_range(1, GRID_COLS - 1)
-	var r := rng.randi_range(1, GRID_ROWS - 1)
-	pts.append(Vector2(c, r))
+	# 在城市范围内随机生成步坐标路径
+	var sx := rng.randf_range(500.0, 9000.0)
+	var sy := rng.randf_range(500.0, 8000.0)
+	pts.append(Vector2(sx, sy))
 	for i in range(rng.randi_range(6, 12)):
 		if rng.randf() < 0.5:
-			c = clampi(c + (1 if rng.randf() < 0.5 else -1), 1, GRID_COLS - 1)
+			sx = clampf(sx + rng.randf_range(-500.0, 500.0), 200.0, 9400.0)
 		else:
-			r = clampi(r + (1 if rng.randf() < 0.5 else -1), 1, GRID_ROWS - 1)
-		pts.append(Vector2(c, r))
+			sy = clampf(sy + rng.randf_range(-500.0, 500.0), 200.0, 8400.0)
+		pts.append(Vector2(sx, sy))
 	return pts
 
 func _update_npcs(delta: float) -> void:
@@ -976,7 +1618,7 @@ func _speaking_group_at(screen_pos: Vector2) -> int:
 		if gi < 0 or gi >= _groups.size():
 			continue
 		var g: Dictionary = _groups[gi]
-		var sp := _world_to_screen(_iso(g["c"], g["r"]))
+		var sp := _world_to_screen(_step_iso(g["c"], g["r"]))
 		var c := sp + Vector2(0, -2.0 * _camera.zoom.x)  # 头顶附近
 		c.y -= (24.0 + 7.0)  # 圆框半径 + 间距（屏幕像素）
 		if screen_pos.distance_to(c) <= 26.0:
@@ -993,7 +1635,7 @@ func _select_group(gi: int) -> void:
 		_panel_anim_t = 0.0
 	_follow_group = gi
 	_zoom_idx = 2
-	_start_cam_anim(ZOOM_LEVELS[2], _iso(g["c"], g["r"]))
+	_start_cam_anim(ZOOM_LEVELS[2], _step_iso(g["c"], g["r"]))
 	var names := PackedStringArray()
 	for m in g["members"]:
 		names.append(String(m["name"]))
@@ -1001,13 +1643,13 @@ func _select_group(gi: int) -> void:
 	_kepu = []
 	_group_chat_open = true
 	_group_chat_title = "、".join(names)
+	EventBus.npc_dialogue_started.emit(gi)
 	_request_group_dialogue(g, names, gi)
 
 func _request_group_dialogue(g: Dictionary, names: PackedStringArray, gi: int) -> void:
 	var n := names.size()
 	var scene := "独处" if n == 1 else ("闲聊" if n == 2 else "结伴议论")
-	var key: String = _cfg.get("api_key", "")
-	if key == "":
+	if not NetworkManager.has_api_key():
 		_show_group_chat(g, _local_group_lines(n))
 		return
 	var period := _time_period(_time_of_day)
@@ -1018,17 +1660,10 @@ func _request_group_dialogue(g: Dictionary, names: PackedStringArray, gi: int) -
 		ev_hint = "坊间正议论「" + ev + "」之事，可适当提及。"
 	var sys := "你是%d年%s的市井百姓。现在是%s。有%d个人在%s。请为每个人各写一句符合当下时代、生活状态且切合当前时段的对话（如黎明起身、清晨问安、正午吃食、午后劳作、黄昏归家、夜晚点灯等）。%s每句不超过15个字，用口语。每人一行，共%d行，不要编号、不要多余标点。" % [_current_year, era, period, n, scene, ev_hint, n]
 	_pending_group = gi
-	var base: String = _cfg.get("api_base_url", "").rstrip("/")
-	var body := {
-		"model": _cfg.get("model", "deepseek-v4-flash"),
-		"messages": [
-			{"role": "system", "content": sys},
-			{"role": "user", "content": "请生成这%d个人的对话。" % n},
-		],
-		"temperature": 0.9,
-		"max_tokens": 120,
-	}
-	_http.request(base + "/chat/completions", PackedStringArray(["Content-Type: application/json", "Authorization: Bearer " + key]), HTTPClient.METHOD_POST, JSON.stringify(body))
+	NetworkManager.request_chat([
+		{"role": "system", "content": sys},
+		{"role": "user", "content": "请生成这%d个人的对话。" % n},
+	], 0.9, 120)
 
 func _local_group_lines(n: int) -> Array:
 	var pool := ["今日米价又涨了", "东市新开了家铺子", "这坊里的桂花开了", "郎君吃过了么", "昨夜下了场小雨", "西市的胡商好多", "该回家生火做饭了", "今日的炊饼甚香"]
@@ -1076,13 +1711,15 @@ func _detect_codex(text: String) -> void:
 			if kw != "" and text.contains(kw) and not collected.has(kw):
 				collected.append(kw)
 				changed = true
+				EventBus.codex_entry_collected.emit(cat, kw)
 		_codex_collected[cat] = collected
+	GameManager.codex_collected = _codex_collected
 	if changed and _ui:
 		_ui.queue_redraw()
 
 func _hit_test(pos: Vector2) -> Dictionary:
 	for p in _points:
-		var gp: Vector2 = GRID_POS.get(String(p["key"]), Vector2(6, 4))
+		var gp := point_grid_position(p)
 		var c := _iso(gp.x, gp.y) + Vector2(0, -8)
 		if pos.distance_to(c) <= 18.0:
 			return p
@@ -1110,6 +1747,7 @@ func _select(p: Dictionary) -> void:
 	_typing_visible = 0
 	_redraw_world()
 	_ui.queue_redraw()
+	EventBus.building_selected.emit(String(p.get("key", "")), p)
 	var sys: String = _cfg.get("system_prompt", "")
 	_messages = [
 		{"role": "system", "content": sys},
@@ -1127,6 +1765,7 @@ func _deselect() -> void:
 	_selected_fang = Vector2(-1, -1)
 	_redraw_world()
 	_ui.queue_redraw()
+	EventBus.building_deselected.emit()
 
 func ask_followup(q: String) -> void:
 	if _selected.is_empty():
@@ -1182,8 +1821,7 @@ func _followup_questions(p: Dictionary) -> Array:
 
 # ==================== LLM ====================
 func _request_llm() -> void:
-	var key: String = _cfg.get("api_key", "")
-	if key == "":
+	if not NetworkManager.has_api_key():
 		_error = "未配置 API Key，已显示知识库原文（config/llm_config.json）"
 		if _pending_intro:
 			_intro_text = _local_text
@@ -1203,24 +1841,7 @@ func _request_llm() -> void:
 		_typing_visible = 0
 	_redraw_world()
 	_ui.queue_redraw()
-	var base: String = _cfg.get("api_base_url", "")
-	base = base.rstrip("/")
-	var url := base + "/chat/completions"
-	var headers := PackedStringArray([
-		"Content-Type: application/json",
-		"Authorization: Bearer " + key,
-	])
-	var body := {
-		"model": _cfg.get("model", "deepseek-v4-flash"),
-		"messages": _messages,
-		"temperature": 0.7,
-		"max_tokens": 500,
-	}
-	var err := _http.request(url, headers, HTTPClient.METHOD_POST, JSON.stringify(body))
-	if err != OK:
-		_loading = false
-		_error = "请求失败（code %d）" % err
-		_ui.queue_redraw()
+	NetworkManager.request_chat(_messages, 0.7, 500)
 
 func _build_prompt(p: Dictionary) -> String:
 	var lines := PackedStringArray()
@@ -1234,8 +1855,19 @@ func _build_prompt(p: Dictionary) -> String:
 	lines.append("【职能】" + String(p.get("function", "")))
 	if String(p.get("built", "")) != "":
 		lines.append("【建造/沿革】" + String(p["built"]))
-	if String(p.get("aliases", "")) != "":
-		lines.append("【别名】" + String(p["aliases"]))
+	var alias_texts := PackedStringArray()
+	var aliases: Variant = p.get("aliases", [])
+	if aliases is Array:
+		for alias in aliases:
+			var alias_item_text := str(alias).strip_edges()
+			if alias_item_text != "":
+				alias_texts.append(alias_item_text)
+	else:
+		var alias_value_text := str(aliases).strip_edges()
+		if alias_value_text != "":
+			alias_texts.append(alias_value_text)
+	if not alias_texts.is_empty():
+		lines.append("【别名】" + "、".join(alias_texts))
 	if String(p.get("quote", "")) != "":
 		lines.append("【原文引文】" + String(p["quote"]))
 	lines.append("【来源】" + String(p.get("source", "")))
@@ -1246,26 +1878,12 @@ func _build_prompt(p: Dictionary) -> String:
 	lines.append("问题二")
 	return "\n".join(lines)
 
-func _on_http_done(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+func _on_chat_response(content: String, error: String) -> void:
 	_loading = false
-	if result != HTTPRequest.RESULT_SUCCESS:
-		_error = "网络错误（%d）" % result
+	if error != "":
+		_error = error
 		_ui.queue_redraw()
 		return
-	if response_code != 200:
-		_error = "API 返回 %d" % response_code
-		_ui.queue_redraw()
-		return
-	var text := body.get_string_from_utf8()
-	var parsed: Variant = JSON.parse_string(text)
-	var content := ""
-	if parsed is Dictionary:
-		var choices: Array = parsed.get("choices", [])
-		if choices.size() > 0:
-			content = String(choices[0].get("message", {}).get("content", ""))
-		else:
-			content = String(parsed.get("error", {}).get("message", ""))
-			_error = "API：%s" % content
 	if _pending_group >= 0:
 		if content != "":
 			_parse_group_response(content)
