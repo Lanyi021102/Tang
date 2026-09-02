@@ -4,16 +4,15 @@ extends Node2D
 var map
 var _avatar_tex: Texture2D
 
-const TW := 128.0
-const TH := 64.0
+const STEP := 0.1
 const AVATAR_R := 24.0  # 头像圆框在屏幕上的半径（像素，保证可点击）
 const BUBBLE_GAP := 7.0  # 圆框与头顶的间距（屏幕像素）
 
 func _ready() -> void:
 	_avatar_tex = load("res://assets/avatar_placeholder.png") if ResourceLoader.exists("res://assets/avatar_placeholder.png") else null
 
-func _iso(c: float, r: float) -> Vector2:
-	return Vector2((c - r) * TW * 0.5, (c + r) * TH * 0.5)
+func _step_iso(sx: float, sy: float) -> Vector2:
+	return Vector2((sx - sy) * STEP * 64.0, (sx + sy) * STEP * 32.0)
 
 func _draw() -> void:
 	if map == null or map._zoom_idx < 1:
@@ -22,14 +21,17 @@ func _draw() -> void:
 	for gi in range(map._groups.size()):
 		var g: Dictionary = map._groups[gi]
 		for m in g["members"]:
-			var p := _iso(g["c"] + m["dc"], g["r"] + m["dr"])
+			# dc/dr 是网格偏移，转换为步偏移（1 网格单位 ≈ 800 步）
+			var sx := float(g["c"]) + float(m["dc"]) * 800.0
+			var sy := float(g["r"]) + float(m["dr"]) * 800.0
+			var p := _step_iso(sx, sy)
 			_draw_figure(p)
 	for s in map._speaking:
 		var gi: int = s["gi"]
 		if gi < 0 or gi >= map._groups.size():
 			continue
 		var g: Dictionary = map._groups[gi]
-		_draw_speak_bubble(_iso(g["c"], g["r"]), zoom, s)
+		_draw_speak_bubble(_step_iso(float(g["c"]), float(g["r"])), zoom, s)
 
 func _draw_figure(p: Vector2) -> void:
 	var s := 1.0
