@@ -21,7 +21,11 @@ const CODEX_CATS := ["衣食住行", "建筑与城市规划", "历史"]
 const TW := 128.0
 const TH := 64.0
 const GRID_COLS := 12
-const GRID_ROWS := 9
+const GRID_ROWS := 13
+# 图谱项目坐标以历史城区中心为原点；游戏网格以左上角为原点。
+# 东侧坊在底图上比西侧多占一列，因此使用独立的横向偏移。
+const WEST_POINT_GRID_OFFSET := Vector2(5.0, 3.0)
+const EAST_POINT_GRID_OFFSET := Vector2(6.0, 3.0)
 
 # ==================== 唐长安城真实布局数据 ====================
 # 每步对应的像素尺寸（可调）
@@ -262,29 +266,16 @@ func _sync_hud_guards() -> void:
 func _iso(c: float, r: float) -> Vector2:
 	return Vector2((c - r) * TW * 0.5, (c + r) * TH * 0.5)
 
-# 步坐标 → 等距屏幕坐标
-func _step_iso(sx: float, sy: float) -> Vector2:
-	return Vector2((sx - sy) * STEP * 64.0, (sx + sy) * STEP * 32.0)
 
-# 第 si 条东西大街北边缘的 y 坐标（步）
-# 布局：街0 → 坊0 → 街1 → 坊1 → ... → 街13
-func _ew_y(si: int) -> float:
-	var y := 0.0
-	for i in range(si):
-		y += float(EW_STREET_WIDTHS[i])
-		if i < EW_FANG_DEPTHS.size():
-			y += float(EW_FANG_DEPTHS[i])
-	return y
-
-# 第 ci 条南北大街西边缘的 x 坐标（步）
-# 布局：街0 → 坊0 → 街1 → 坊1 → ... → 街10
-func _ns_x(ci: int) -> float:
-	var x := 0.0
-	for i in range(ci):
-		x += float(NS_STREET_WIDTHS[i])
-		if i < NS_FANG_WIDTHS.size():
-			x += float(NS_FANG_WIDTHS[i])
-	return x
+func point_grid_position(p: Dictionary) -> Vector2:
+	if not p.has("grid_x") or not p.has("grid_y"):
+		return Vector2(6.0, 6.0)
+	var source_x := float(p.get("grid_x", 0.0))
+	var offset := EAST_POINT_GRID_OFFSET if source_x > 0.0 else WEST_POINT_GRID_OFFSET
+	return Vector2(
+		source_x + offset.x,
+		float(p.get("grid_y", 0.0)) + offset.y
+	)
 
 func _ready() -> void:
 	_setup_fonts()
@@ -547,11 +538,11 @@ func _cam_pos_for(idx: int) -> Vector2:
 	var center := _step_iso(4831.5, 4334.0)
 	match idx:
 		0:
-			return center
+			return _iso(6.0, 6.5) + Vector2(0, 40)
 		2:
 			return _near_fang_center()
 		_:
-			return center + Vector2(0, 200)
+			return _iso(6.0, 6.5) + Vector2(0, 40)
 
 func _near_fang_center() -> Vector2:
 	# 默认放大到城南区域（坊密集区）
@@ -1732,12 +1723,9 @@ func _detect_codex(text: String) -> void:
 
 func _hit_test(pos: Vector2) -> Dictionary:
 	for p in _points:
-		var gp: Vector2 = GRID_POS.get(String(p["key"]), Vector2(6, 4))
-		# 将旧网格坐标近似转换为步坐标
-		var sx := gp.x * 805.25
-		var sy := gp.y * 963.1
-		var c := _step_iso(sx, sy) + Vector2(0, -8)
-		if pos.distance_to(c) <= 180.0:
+		var gp := point_grid_position(p)
+		var c := _iso(gp.x, gp.y) + Vector2(0, -8)
+		if pos.distance_to(c) <= 18.0:
 			return p
 	return {}
 func _select(p: Dictionary) -> void:
@@ -1870,8 +1858,19 @@ func _build_prompt(p: Dictionary) -> String:
 	lines.append("【职能】" + String(p.get("function", "")))
 	if String(p.get("built", "")) != "":
 		lines.append("【建造/沿革】" + String(p["built"]))
-	if String(p.get("aliases", "")) != "":
-		lines.append("【别名】" + String(p["aliases"]))
+	var alias_texts := PackedStringArray()
+	var aliases: Variant = p.get("aliases", [])
+	if aliases is Array:
+		for alias in aliases:
+			var alias_item_text := str(alias).strip_edges()
+			if alias_item_text != "":
+				alias_texts.append(alias_item_text)
+	else:
+		var alias_value_text := str(aliases).strip_edges()
+		if alias_value_text != "":
+			alias_texts.append(alias_value_text)
+	if not alias_texts.is_empty():
+		lines.append("【别名】" + "、".join(alias_texts))
 	if String(p.get("quote", "")) != "":
 		lines.append("【原文引文】" + String(p["quote"]))
 	lines.append("【来源】" + String(p.get("source", "")))

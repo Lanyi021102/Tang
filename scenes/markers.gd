@@ -1,5 +1,5 @@
 extends Node2D
-# 点位标记 + 名称标签（读取主脚本的 _points / GRID_POS / _selected / _zoom_idx / font_song）
+# 点位标记 + 名称标签（读取主脚本的 _points / _selected / _zoom_idx / font_song）
 
 var map
 
@@ -22,7 +22,7 @@ func _iso(c: float, r: float) -> Vector2:
 
 func _draw() -> void:
 	for p in map._points:
-		var gp: Vector2 = map.GRID_POS.get(String(p["key"]), Vector2(6, 4))
+		var gp: Vector2 = map.point_grid_position(p)
 		var c := _iso(gp.x, gp.y) + Vector2(0, -8)
 		var col: Color = ZONE_COLOR.get(p["zone"], INK)
 		var is_sel: bool = not map._selected.is_empty() and map._selected["key"] == p["key"]
