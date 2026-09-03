@@ -7,17 +7,55 @@ var fang_name := ""
 var cell := Vector2.ZERO
 var map
 var tex: Texture2D = null  # 当前坊的贴图
-var is_rect := false       # 是否为长方形坊
+var uv_top := Vector2(0.5, 0.0)
+var uv_bottom := Vector2(0.5, 1.0)
+var uv_left := Vector2(0.0, 0.5)
+var uv_right := Vector2(1.0, 0.5)
 
 const SIDE := Color("#8a7348")
 const INK := Color("#3a362e")
 
+# 每张贴图的内容菱形 UV 缓存（同一贴图只算一次）
+static var _uv_cache: Dictionary = {}
+
 func _ready() -> void:
 	if tex:
-		print("[FANG] %s 贴图已设置: %s (%dx%d)" % [fang_name, tex.resource_path, tex.get_width(), tex.get_height()])
-	else:
-		print("[FANG] %s 贴图为 NULL" % fang_name)
+		_compute_diamond_uv()
 	queue_redraw()
+
+# 由贴图 alpha 内容包围盒，求出内容菱形四顶点 UV（四边中点 = 菱形角），
+# 解决图片四周透明留白导致的"黑边 + 内容与地块菱形错位"
+func _compute_diamond_uv() -> void:
+	var key := String(tex.resource_path)
+	if _uv_cache.has(key):
+		var d: Dictionary = _uv_cache[key]
+		uv_top = d["top"]; uv_bottom = d["bottom"]; uv_left = d["left"]; uv_right = d["right"]
+		return
+	var img := tex.get_image()
+	if img == null:
+		return
+	var w := img.get_width()
+	var h := img.get_height()
+	var x0 := w; var x1 := 0; var y0 := h; var y1 := 0
+	for yy in range(0, h, 3):
+		for xx in range(0, w, 3):
+			if img.get_pixel(xx, yy).a > 0.05:
+				if xx < x0: x0 = xx
+				if xx > x1: x1 = xx
+				if yy < y0: y0 = yy
+				if yy > y1: y1 = yy
+	if x1 < x0 or y1 < y0:
+		return
+	var cxf := float(x0 + x1) * 0.5 / float(w)
+	var cyf := float(y0 + y1) * 0.5 / float(h)
+	var d := {
+		"top": Vector2(cxf, float(y0) / float(h)),
+		"bottom": Vector2(cxf, float(y1) / float(h)),
+		"left": Vector2(float(x0) / float(w), cyf),
+		"right": Vector2(float(x1) / float(w), cyf),
+	}
+	_uv_cache[key] = d
+	uv_top = d["top"]; uv_bottom = d["bottom"]; uv_left = d["left"]; uv_right = d["right"]
 
 func _draw() -> void:
 	var fang_scale := 1.0
@@ -31,52 +69,16 @@ func _draw() -> void:
 	var NE := Vector2((hw - hh) * 6.4, (hw + hh) * 3.2)
 	var SE := Vector2((hw + hh) * 6.4, (hw - hh) * 3.2)
 	var SW := Vector2((-hw + hh) * 6.4, (-hw - hh) * 3.2)
-	var dn := Vector2(0, 6)
-	_poly(PackedVector2Array([SW, SE, SE + dn, SW + dn]), SIDE.darkened(0.1))
-	_poly(PackedVector2Array([SE, NE, NE + dn, SE + dn]), SIDE.darkened(0.3))
-	
-	# 渲染贴图或默认颜色
+
+	# 渲染贴图或默认颜色（图片已是完整等轴坊渲染，不再额外加黑色描边/3D侧壁，避免黑边）
 	if tex:
 		var pts := PackedVector2Array([NW, NE, SE, SW])
-		# 等轴视角贴图的 UV 映射 + 缩放调整
-		# 基础 UV：菱形贴图的四个角对应图片的中心菱形区域
-		# UV: NW=(0.5, 0), NE=(1, 0.5), SE=(0.5, 1), SW=(0, 0.5)
-		
-		# 计算缩放因子，使贴图菱形完全填满地块菱形
-		# 注意：scale_factor < 1.0 会让贴图变大（UV范围缩小，拉伸到相同顶点）
-		# scale_factor > 1.0 会让贴图变小（UV范围扩大，压缩到相同顶点）
-		
-		var uv_center := Vector2(0.5, 0.5)
-		var uv_half_x := 0.0  # X方向半宽
-		var uv_half_y := 0.0  # Y方向半高
-		
-		if is_rect:
-			# 长方形坊：独立控制长边（X方向）和短边（Y方向）
-			uv_half_x = 0.5 * 0.80465  # 长边缩放：从0.7315增加10%到0.80465，再缩短10%
-			uv_half_y = 0.5 * 0.605    # 短边保持：0.605不变，确保贴合
-		else:
-			# 正方形坊：等比例缩放
-			var uniform_scale := 0.7986  # 从0.726增加10%到0.7986
-			uv_half_x = 0.5 * uniform_scale
-			uv_half_y = 0.5 * uniform_scale
-		
-		var uvs := PackedVector2Array([
-			Vector2(0.5 - uv_half_x, 0.5 - uv_half_y),  # NW → 左上角
-			Vector2(0.5 + uv_half_x, 0.5 - uv_half_y),  # NE → 右上角
-			Vector2(0.5 + uv_half_x, 0.5 + uv_half_y),  # SE → 右下角
-			Vector2(0.5 - uv_half_x, 0.5 + uv_half_y)   # SW → 左下角
-		])
-		
-		# 使用标准UV映射，不进行几何旋转
-		var final_pts := pts
-		
+		# 内容菱形四顶点映射到地块菱形四角（NW=左, NE=下, SE=右, SW=上）
+		var uvs := PackedVector2Array([uv_left, uv_bottom, uv_right, uv_top])
 		var colors := PackedColorArray([Color.WHITE, Color.WHITE, Color.WHITE, Color.WHITE])
-		draw_polygon(final_pts, colors, uvs, tex)
+		draw_polygon(pts, colors, uvs, tex)
 	else:
 		_poly(PackedVector2Array([NW, NE, SE, SW]), Color("#cdbb8f"))
-	var outline := PackedVector2Array([NW, NE, SE, SW, NW])
-	for i in range(4):
-		draw_line(outline[i], outline[i + 1], Color.BLACK, 3.0)
 	# 坊名标签
 	if fang_name != "" and map != null and map._zoom_idx >= 2:
 		var zoom: float = map._camera.zoom.x
