@@ -78,7 +78,8 @@ var font_song: Font
 var font_hei: Font
 var _points: Array = []
 var _cfg: Dictionary = {}
-var _fang_tex: Array = []
+var _square_tex: Array = []  # 正方形坊贴图
+var _rect_tex: Array = []    # 长方形坊贴图
 var _camera: Camera2D
 
 var _selected: Dictionary = {}
@@ -266,24 +267,23 @@ func _sync_hud_guards() -> void:
 func _iso(c: float, r: float) -> Vector2:
 	return Vector2((c - r) * TW * 0.5, (c + r) * TH * 0.5)
 
-# 网格步坐标 -> 等距世界坐标（与 npcs.gd/world.gd 一致）
+# 步坐标 → 等距屏幕坐标
 func _step_iso(sx: float, sy: float) -> Vector2:
 	return Vector2((sx - sy) * STEP * 64.0, (sx + sy) * STEP * 32.0)
 
-# 第 ci 条南北大街的西边缘 x（累计街上宽 + 坊宽）
+# 第 ci 列坊的西侧 X 步坐标（累加坊宽+街宽）
 func _ns_x(ci: int) -> float:
 	var x := 0.0
-	var n := mini(ci, NS_STREET_WIDTHS.size())
-	for k in range(n):
-		x += float(NS_STREET_WIDTHS[k]) + float(NS_FANG_WIDTHS[k])
+	for i in range(ci):
+		x += float(NS_FANG_WIDTHS[i]) + float(NS_STREET_WIDTHS[i])
 	return x
 
-# 第 si 条东西大街的北边缘 y（累计街上宽 + 坊纵深）
+# 第 si 行坊的北侧 Y 步坐标（累加坊深+街宽）
 func _ew_y(si: int) -> float:
 	var y := 0.0
-	var n := mini(si, EW_STREET_WIDTHS.size())
-	for k in range(n):
-		y += float(EW_STREET_WIDTHS[k]) + float(EW_FANG_DEPTHS[k])
+	for i in range(si):
+		y += float(EW_FANG_DEPTHS[i]) + float(EW_STREET_WIDTHS[i])
+	return y
 	return y
 
 
@@ -334,13 +334,10 @@ func _sync_from_data() -> void:
 	_year_display = float(_current_year)
 
 func _build_fangs() -> void:
-	_fang_tex.clear()
-	for n in ["fang_a.png", "fang_b.png", "fang_c.png"]:
-		var p: String = FANG_DIR + n
-		if ResourceLoader.exists(p):
-			_fang_tex.append(load(p))
-		else:
-			_fang_tex.append(null)
+	# 贴图已清除，不再加载
+	_square_tex.clear()
+	_rect_tex.clear()
+	print("=== 坊贴图已清除 ===")
 
 func _build_camera() -> void:
 	_camera = get_node("Camera")
@@ -457,6 +454,7 @@ func _build_world() -> void:
 			node.set("fang_h", fang_ns_depth * STEP)
 			node.set("cell", Vector2(ci, si))
 			node.set("z_index", int((fy + fang_ns_depth * 0.5) * 0.4))
+			# 贴图已清除，不分配贴图
 			fangs_node.add_child(node)
 			node.call("set_map_ref", self)
 	# ---- 创建东西向街道（只覆盖坊区域，不覆盖全城）----
