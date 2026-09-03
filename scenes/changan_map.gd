@@ -80,6 +80,7 @@ var _points: Array = []
 var _cfg: Dictionary = {}
 var _square_tex: Array = []  # 正方形坊贴图
 var _rect_tex: Array = []    # 长方形坊贴图
+var _fang_tex_map: Dictionary = {}  # 坊名 -> 贴图（按名精确匹配 + 分级回落）
 var _camera: Camera2D
 
 var _selected: Dictionary = {}
@@ -334,10 +335,30 @@ func _sync_from_data() -> void:
 	_year_display = float(_current_year)
 
 func _build_fangs() -> void:
-	# 贴图已清除，不再加载
+	# 贴图加载：按坊名匹配正式图，找不到再按分级回落（贵族/平民）
 	_square_tex.clear()
 	_rect_tex.clear()
-	print("=== 坊贴图已清除 ===")
+	_fang_tex_map.clear()
+	var names := [
+		"安仁坊", "布政坊", "崇仁坊", "靖善坊", "平康坊", "亲仁坊", "善和坊",
+		"太平坊", "通化坊", "通义坊", "宣阳坊", "东市", "西市",
+		"贵族坊1", "贵族坊2", "贵族坊3", "贵族坊4",
+		"平民坊1", "平民坊2", "平民坊3", "平民坊4",
+	]
+	for n in names:
+		var p: String = "res://assets/fang/" + n + ".png"
+		if ResourceLoader.exists(p):
+			_fang_tex_map[n] = load(p)
+	print("=== 坊贴图加载完毕：%d 张 ===" % _fang_tex_map.size())
+
+# 给某个坊取贴图：先按坊名精确匹配，再按南北分级（贵族/平民）取变体
+func _fang_tex_for(fname: String, si: int, ci: int) -> Texture2D:
+	if _fang_tex_map.has(fname):
+		return _fang_tex_map[fname]
+	var noble := si <= 6  # 北半边（近宫城）视为贵族坊
+	var tier := "贵族坊" if noble else "平民坊"
+	var variant := (si + ci) % 4 + 1
+	return _fang_tex_map.get(tier + str(variant), null)
 
 func _build_camera() -> void:
 	_camera = get_node("Camera")
@@ -454,7 +475,8 @@ func _build_world() -> void:
 			node.set("fang_h", fang_ns_depth * STEP)
 			node.set("cell", Vector2(ci, si))
 			node.set("z_index", int((fy + fang_ns_depth * 0.5) * 0.4))
-			# 贴图已清除，不分配贴图
+			# 分配正式坊贴图
+			node.set("tex", _fang_tex_for(fname, si, ci))
 			fangs_node.add_child(node)
 			node.call("set_map_ref", self)
 	# ---- 创建东西向街道（只覆盖坊区域，不覆盖全城）----
