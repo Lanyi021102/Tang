@@ -1,4 +1,4 @@
-extends Node2D
+﻿extends Node2D
 
 # 唐长安城 2.5D 45°等距鸟瞰场景
 # Tang Chang'an — 45° isometric bird's-eye view, 3 zoom levels via mouse wheel.
@@ -302,6 +302,7 @@ func _ready() -> void:
 	_setup_fonts()
 	_sync_from_data()
 	_build_fangs()
+	_assign_generic_fang_textures()
 	_build_camera()
 	_build_lights()
 	_build_world()
@@ -351,15 +352,95 @@ func _build_fangs() -> void:
 			_fang_tex_map[n] = load(p)
 	print("=== 坊贴图加载完毕：%d 张 ===" % _fang_tex_map.size())
 
-# 给某个坊取贴图：先按坊名精确匹配，再按南北分级（贵族/平民）取变体
+# 给某个坊取贴图：只返回精确匹配的专属贴图，无匹配则返回null（显示纯色）
 func _fang_tex_for(fname: String, si: int, ci: int) -> Texture2D:
+	# 东市使用西市贴图
+	if fname == "东市":
+		return _fang_tex_map.get("西市", null)
+	# 特定坊使用贵族坊贴图
+	if fname == "丰乐坊":
+		return _fang_tex_map.get("贵族坊3", null)
+	if fname == "安业坊":
+		return _fang_tex_map.get("贵族坊4", null)
+	if fname == "群贤坊":
+		return _fang_tex_map.get("贵族坊1", null)
+	if fname == "怀德坊":
+		return _fang_tex_map.get("贵族坊2", null)
+	if fname == "崇业坊":
+		return _fang_tex_map.get("平民坊1", null)
+	if fname == "兴化坊":
+		return _fang_tex_map.get("平民坊2", null)
+	if fname == "崇德坊":
+		return _fang_tex_map.get("平民坊3", null)
+	# 通用坊贴图分配查找
+	if _generic_fang_tex_assign.has(fname):
+		return _fang_tex_map.get(_generic_fang_tex_assign[fname], null)
 	if _fang_tex_map.has(fname):
 		return _fang_tex_map[fname]
-	var noble := si <= 6  # 北半边（近宫城）视为贵族坊
-	var tier := "贵族坊" if noble else "平民坊"
-	var variant := (si + ci) % 4 + 1
-	return _fang_tex_map.get(tier + str(variant), null)
+	return null
 
+var _generic_fang_tex_assign: Dictionary = {}  # 坊名 -> 分配的贴图名（通用坊随机分配）
+
+# 贴图UV参数表：贴图名 -> {ew, ns, rot}
+var _tex_uv_params: Dictionary = {
+	"亲仁坊": {"ew": 1.26, "ns": 0.76, "rot": -1.0},
+	"安仁坊": {"ew": 1.031, "ns": 0.971, "rot": 0.5},
+	"崇仁坊": {"ew": 1.1, "ns": 0.9, "rot": 0.0},
+	"平康坊": {"ew": 1.3, "ns": 0.714, "rot": -2.0},
+	"宣阳坊": {"ew": 1.25, "ns": 0.714, "rot": -2.0},
+	"太平坊": {"ew": 1.111, "ns": 0.909, "rot": 0.0},
+	"通义坊": {"ew": 1.111, "ns": 0.909, "rot": 0.0},
+	"布政坊": {"ew": 0.962, "ns": 1.064, "rot": 0.0},
+	"贵族坊1": {"ew": 1.333, "ns": 0.694, "rot": -1.0},
+	"贵族坊2": {"ew": 1.333, "ns": 0.694, "rot": -1.0},
+	"贵族坊3": {"ew": 1.02, "ns": 1.02, "rot": 0.0},
+	"贵族坊4": {"ew": 1.02, "ns": 1.01, "rot": 0.0},
+	"平民坊1": {"ew": 1.0, "ns": 1.0, "rot": 0.0},
+	"平民坊2": {"ew": 1.176, "ns": 0.833, "rot": 0.0},
+	"平民坊3": {"ew": 1.163, "ns": 0.862, "rot": 0.0},
+	"靖善坊": {"ew": 1.0, "ns": 1.0, "rot": 0.0},
+}
+
+# 为无贴图的坊按区域规则随机分配贴图
+func _assign_generic_fang_textures() -> void:
+	# 第5-13街（si=4-12）第1-3列（ci=0-2）、第8-10列（ci=7-9）
+	var group_a = ["贵族坊1", "贵族坊2", "平康坊", "宣阳坊", "亲仁坊"]
+	# 第5-13街（si=4-12）第4列（ci=3）、第7列（ci=6）
+	var group_b = ["太平坊", "通义坊", "平民坊2", "平民坊3"]
+	# 第5-13街（si=4-12）第5-6列（ci=4-5）
+	var group_c = ["平民坊1", "贵族坊3", "贵族坊4", "安仁坊", "靖善坊"]
+	# 第1-4街（si=0-3）第1-3列（ci=0-2）、第8-10列（ci=7-9）
+	var group_d = ["布政坊", "崇仁坊"]
+	for si in range(13):
+		for ci in range(10):
+			if si >= EW_FANG_NAMES.size() or ci >= EW_FANG_NAMES[si].size():
+				continue
+			var fname = EW_FANG_NAMES[si][ci]
+			if fname == "":
+				continue
+			if _fang_tex_map.has(fname) or fname == "东市" or fname == "西市":
+				continue
+			if fname in ["丰乐坊", "安业坊", "群贤坊", "怀德坊", "崇业坊", "兴化坊", "崇德坊"]:
+				continue
+			var tex_name: String = ""
+			var h: int
+			if si >= 4:
+				if ci <= 2 or ci >= 7:
+					h = hash(Vector2i(ci + 100, si + 100))
+					tex_name = group_a[(h % group_a.size() + group_a.size()) % group_a.size()]
+				elif ci == 3 or ci == 6:
+					h = hash(Vector2i(ci + 200, si + 200))
+					tex_name = group_b[(h % group_b.size() + group_b.size()) % group_b.size()]
+				elif ci >= 4 and ci <= 5:
+					h = hash(Vector2i(ci + 300, si + 300))
+					tex_name = group_c[(h % group_c.size() + group_c.size()) % group_c.size()]
+			else:
+				if ci <= 2 or ci >= 7:
+					h = hash(Vector2i(ci + 400, si + 400))
+					tex_name = group_d[(h % group_d.size() + group_d.size()) % group_d.size()]
+			if tex_name != "":
+				_generic_fang_tex_assign[fname] = tex_name
+	print("=== 通用坊贴图分配完毕：%d 个坊 ===" % _generic_fang_tex_assign.size())
 func _build_camera() -> void:
 	_camera = get_node("Camera")
 	_camera.make_current()
@@ -461,6 +542,10 @@ func _build_world() -> void:
 			var fname: String = EW_FANG_NAMES[si][ci]
 			if fname == "":
 				continue
+			# ---- 西市/东市各占两行，合并为一个地块 ----
+			# 第二行（si=5）的市集跳过（已在第一行创建合并地块）
+			if (fname == "西市" or fname == "东市") and si == 5:
+				continue
 			var fang_ew_width := float(NS_FANG_WIDTHS[ci])  # 坊的东西宽度
 			var fx := _ns_x(ci) + float(NS_STREET_WIDTHS[ci])  # 坊列西边缘 x
 			# 创建坊节点
@@ -468,18 +553,91 @@ func _build_world() -> void:
 			node.set_script(FangScript)
 			node.name = "坊-%d-%d" % [si, ci]
 			var center_sx := fx + fang_ew_width * 0.5
-			var center_sy := fy + fang_ns_depth * 0.5
+			var center_sy: float
+			var draw_h: float = fang_ns_depth
+			# 市集（西市/东市）合并：跨两行高度
+			if (fname == "西市" or fname == "东市") and si == 4:
+				draw_h = fang_ns_depth + float(EW_STREET_WIDTHS[5]) + float(EW_FANG_DEPTHS[5])
+				center_sy = fy + draw_h * 0.5
+			else:
+				center_sy = fy + fang_ns_depth * 0.5
 			node.position = _step_iso(center_sx, center_sy)
 			node.set("fang_name", fname)
 			node.set("fang_w", fang_ew_width * STEP)
-			node.set("fang_h", fang_ns_depth * STEP)
+			node.set("fang_h", draw_h * STEP)
 			node.set("cell", Vector2(ci, si))
-			node.set("z_index", int((fy + fang_ns_depth * 0.5) * 0.4))
+			node.set("z_index", int(center_sy * 0.4))
 			# 分配正式坊贴图
 			node.set("tex", _fang_tex_for(fname, si, ci))
+			# 坊特定UV缩放覆盖（无覆盖则使用默认值1.0）
+			if fname == "亲仁坊":
+				node.set("uv_scale_ew", 1.26)  # ew方向比之前再缩小5%
+				node.set("uv_scale_ns", 0.76)  # ns方向缩放
+				node.set("uv_rotation_degrees", -1.0)  # 逆时针旋转1度
+			if fname == "怀德坊":
+				node.set("uv_scale_ew", 1.333)
+				node.set("uv_scale_ns", 0.694)
+			if fname == "安仁坊":
+				node.set("uv_scale_ew", 1.031)  # ew方向缩小3%
+				node.set("uv_scale_ns", 0.971)  # ns方向扩大3%
+				node.set("uv_rotation_degrees", 0.5)  # 顺时针旋转0.5度
+			if fname == "崇仁坊":
+				node.set("uv_scale_ew", 1.1)  # ew方向缩小10%
+				node.set("uv_scale_ns", 0.9)  # ns方向扩大10%
+			if fname == "平康坊":
+				node.set("uv_scale_ew", 1.3)  # ew方向缩放
+				node.set("uv_scale_ns", 0.714)  # ns方向放大40%
+				node.set("uv_rotation_degrees", -2.0)  # 逆时针旋转2度
+			if fname == "宣阳坊":
+				node.set("uv_scale_ew", 1.25)  # ew方向缩小20%
+				node.set("uv_scale_ns", 0.714)  # ns方向放大40%
+				node.set("uv_rotation_degrees", -2.0)  # 逆时针旋转2度
+			if fname == "太平坊":
+				node.set("uv_scale_ew", 1.111)  # ew方向缩小10%
+				node.set("uv_scale_ns", 0.909)  # ns方向扩大10%
+			if fname == "通义坊":
+				node.set("uv_scale_ew", 1.111)  # ew方向缩小10%
+				node.set("uv_scale_ns", 0.909)  # ns方向扩大10%
+			if fname == "布政坊":
+				node.set("uv_scale_ew", 0.962)  # ew方向扩大4%
+				node.set("uv_scale_ns", 1.064)  # ns方向缩小6%
+			if fname == "西市":
+				node.set("uv_scale_ew", 1.042)  # ew方向缩小4%
+				node.set("uv_scale_ns", 0.952)  # ns方向扩大5%
+			if fname == "东市":
+				node.set("uv_scale_ew", 1.042)  # ew方向缩小4%
+				node.set("uv_scale_ns", 0.952)  # ns方向扩大5%
+			if fname == "安业坊":
+				node.set("uv_scale_ew", 1.02)  # ew方向缩小2%
+				node.set("uv_scale_ns", 1.01)  # ns方向缩小1%
+			if fname == "丰乐坊":
+				node.set("uv_scale_ew", 1.02)  # ew方向缩小2%
+				node.set("uv_scale_ns", 1.02)  # ns方向缩小2%
+			if fname == "群贤坊":
+				node.set("uv_scale_ew", 1.333)  # ew方向缩小25%
+				node.set("uv_scale_ns", 0.694)  # ns方向扩大44%
+				node.set("uv_rotation_degrees", -1.0)  # 逆时针旋转1度
+			if fname == "怀德坊":
+				node.set("uv_scale_ew", 1.333)
+				node.set("uv_scale_ns", 0.694)
+				node.set("uv_rotation_degrees", -1.0)  # 逆时针旋转1度
+			if fname == "兴化坊":
+				node.set("uv_scale_ew", 1.176)  # ew方向缩小15%
+				node.set("uv_scale_ns", 0.833)  # ns方向扩大20%
+			if fname == "崇德坊":
+				node.set("uv_scale_ew", 1.163)  # ew方向缩小14%
+				node.set("uv_scale_ns", 0.862)  # ns方向扩大16%
+			# 通用坊贴图UV参数：按分配的贴图名查找
+			if _generic_fang_tex_assign.has(fname):
+				var assigned_tex = _generic_fang_tex_assign[fname]
+				if _tex_uv_params.has(assigned_tex):
+					var uv = _tex_uv_params[assigned_tex]
+					node.set("uv_scale_ew", uv.ew)
+					node.set("uv_scale_ns", uv.ns)
+					if uv.rot != 0.0:
+						node.set("uv_rotation_degrees", uv.rot)
 			fangs_node.add_child(node)
 			node.call("set_map_ref", self)
-	# ---- 创建东西向街道（只覆盖坊区域，不覆盖全城）----
 	var fang_area_ew := float(NS_FANG_WIDTHS.reduce(func(a, b): return a + b, 0)) + float(NS_STREET_WIDTHS.reduce(func(a, b): return a + b, 0))  # = 9663
 	var fang_area_ns := float(EW_FANG_DEPTHS.reduce(func(a, b): return a + b, 0)) + float(EW_STREET_WIDTHS.reduce(func(a, b): return a + b, 0)) - float(EW_STREET_WIDTHS[0]) - float(EW_STREET_WIDTHS[13])  # 不含南北边界路
 	for si in range(15):

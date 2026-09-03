@@ -1,4 +1,4 @@
-extends Node2D
+﻿extends Node2D
 # 单个坊（等距矩形 + 坊名标签）— 基于步坐标尺寸
 
 var fang_w := 1.0      # 坊东西宽度（步 × STEP）
@@ -11,6 +11,17 @@ var uv_top := Vector2(0.5, 0.0)
 var uv_bottom := Vector2(0.5, 1.0)
 var uv_left := Vector2(0.0, 0.5)
 var uv_right := Vector2(1.0, 0.5)
+
+# ========== UV缩放调整（可手动修改） ==========
+# 沿等轴测轴方向缩放（非水平/垂直！）
+# ew: 沿等轴测↘方向（垂直线顺时针120°）
+# ns: 沿等轴测↙方向（垂直线逆时针120°）
+# > 1.0 = 贴图缩小, < 1.0 = 贴图放大
+var uv_scale_ew := 1.0
+var uv_scale_ns := 1.0
+# UV旋转角度（顺时针为正，单位：度）
+var uv_rotation_degrees := 0.0
+# =============================================
 
 const SIDE := Color("#8a7348")
 const INK := Color("#3a362e")
@@ -26,10 +37,13 @@ func _ready() -> void:
 # 由贴图 alpha 内容包围盒，求出内容菱形四顶点 UV（四边中点 = 菱形角），
 # 解决图片四周透明留白导致的"黑边 + 内容与地块菱形错位"
 func _compute_diamond_uv() -> void:
-	var key := String(tex.resource_path)
+	var key := String(tex.resource_path) + "_rot" + str(uv_rotation_degrees)
 	if _uv_cache.has(key):
 		var d: Dictionary = _uv_cache[key]
-		uv_top = d["top"]; uv_bottom = d["bottom"]; uv_left = d["left"]; uv_right = d["right"]
+		uv_top = d["top"]
+		uv_bottom = d["bottom"]
+		uv_left = d["left"]
+		uv_right = d["right"]
 		return
 	var img := tex.get_image()
 	if img == null:
@@ -48,14 +62,43 @@ func _compute_diamond_uv() -> void:
 		return
 	var cxf := float(x0 + x1) * 0.5 / float(w)
 	var cyf := float(y0 + y1) * 0.5 / float(h)
+	var center := Vector2(cxf, cyf)
+	var half_w_uv := (float(x1 - x0) / float(w)) * 0.5
+	var half_h_uv := (float(y1 - y0) / float(h)) * 0.5
+	# 等轴测UV缩放：转换到等轴测基(1,1)/(1,-1)缩放后转回
+	var se := uv_scale_ew
+	var sn := uv_scale_ns
+	var scale_a := (se + sn) * 0.5
+	var scale_b := (se - sn) * 0.5
+	var top_off := Vector2(0, -half_h_uv)
+	var bot_off := Vector2(0, half_h_uv)
+	var left_off := Vector2(-half_w_uv, 0)
+	var right_off := Vector2(half_w_uv, 0)
+	# 等轴测缩放后的UV偏移
+	var top_scaled := Vector2(top_off.x*scale_a + top_off.y*scale_b, top_off.x*scale_b + top_off.y*scale_a)
+	var bot_scaled := Vector2(bot_off.x*scale_a + bot_off.y*scale_b, bot_off.x*scale_b + bot_off.y*scale_a)
+	var left_scaled := Vector2(left_off.x*scale_a + left_off.y*scale_b, left_off.x*scale_b + left_off.y*scale_a)
+	var right_scaled := Vector2(right_off.x*scale_a + right_off.y*scale_b, right_off.x*scale_b + right_off.y*scale_a)
+	# UV旋转（绕中心）
+	if abs(uv_rotation_degrees) > 0.001:
+		var angle := uv_rotation_degrees * PI / 180.0
+		var cos_a := cos(angle)
+		var sin_a := sin(angle)
+		top_scaled = Vector2(top_scaled.x*cos_a - top_scaled.y*sin_a, top_scaled.x*sin_a + top_scaled.y*cos_a)
+		bot_scaled = Vector2(bot_scaled.x*cos_a - bot_scaled.y*sin_a, bot_scaled.x*sin_a + bot_scaled.y*cos_a)
+		left_scaled = Vector2(left_scaled.x*cos_a - left_scaled.y*sin_a, left_scaled.x*sin_a + left_scaled.y*cos_a)
+		right_scaled = Vector2(right_scaled.x*cos_a - right_scaled.y*sin_a, right_scaled.x*sin_a + right_scaled.y*cos_a)
 	var d := {
-		"top": Vector2(cxf, float(y0) / float(h)),
-		"bottom": Vector2(cxf, float(y1) / float(h)),
-		"left": Vector2(float(x0) / float(w), cyf),
-		"right": Vector2(float(x1) / float(w), cyf),
+		"top": center + top_scaled,
+		"bottom": center + bot_scaled,
+		"left": center + left_scaled,
+		"right": center + right_scaled,
 	}
 	_uv_cache[key] = d
-	uv_top = d["top"]; uv_bottom = d["bottom"]; uv_left = d["left"]; uv_right = d["right"]
+	uv_top = d["top"]
+	uv_bottom = d["bottom"]
+	uv_left = d["left"]
+	uv_right = d["right"]
 
 func _draw() -> void:
 	var fang_scale := 1.0
