@@ -266,6 +266,26 @@ func _sync_hud_guards() -> void:
 func _iso(c: float, r: float) -> Vector2:
 	return Vector2((c - r) * TW * 0.5, (c + r) * TH * 0.5)
 
+# 网格步坐标 -> 等距世界坐标（与 npcs.gd/world.gd 一致）
+func _step_iso(sx: float, sy: float) -> Vector2:
+	return Vector2((sx - sy) * STEP * 64.0, (sx + sy) * STEP * 32.0)
+
+# 第 ci 条南北大街的西边缘 x（累计街上宽 + 坊宽）
+func _ns_x(ci: int) -> float:
+	var x := 0.0
+	var n := mini(ci, NS_STREET_WIDTHS.size())
+	for k in range(n):
+		x += float(NS_STREET_WIDTHS[k]) + float(NS_FANG_WIDTHS[k])
+	return x
+
+# 第 si 条东西大街的北边缘 y（累计街上宽 + 坊纵深）
+func _ew_y(si: int) -> float:
+	var y := 0.0
+	var n := mini(si, EW_STREET_WIDTHS.size())
+	for k in range(n):
+		y += float(EW_STREET_WIDTHS[k]) + float(EW_FANG_DEPTHS[k])
+	return y
+
 
 func point_grid_position(p: Dictionary) -> Vector2:
 	if not p.has("grid_x") or not p.has("grid_y"):
@@ -436,7 +456,7 @@ func _build_world() -> void:
 			node.set("fang_w", fang_ew_width * STEP)
 			node.set("fang_h", fang_ns_depth * STEP)
 			node.set("cell", Vector2(ci, si))
-			node.set("z_index", int(fy + fang_ns_depth * 0.5) + 1000)
+			node.set("z_index", int((fy + fang_ns_depth * 0.5) * 0.4))
 			fangs_node.add_child(node)
 			node.call("set_map_ref", self)
 	# ---- 创建东西向街道（只覆盖坊区域，不覆盖全城）----
@@ -469,7 +489,7 @@ func _build_world() -> void:
 		node.set("tile_type", "东西街道")
 		node.set("road_width", int(float(EW_STREET_WIDTHS[mini(si, 13)])))
 		node.set("road_length", int(road_len))
-		node.set("z_index", int(road_y) + 1000)
+		node.set("z_index", int(road_y * 0.4))
 		node.set("color", Color("#8fb8c9"))
 		streets_node.add_child(node)
 		node.call("set_map_ref", self)
@@ -501,7 +521,7 @@ func _build_world() -> void:
 		node.set("tile_type", "南北街道")
 		node.set("road_width", int(float(NS_STREET_WIDTHS[mini(ci, 10)])))
 		node.set("road_length", int(road_len))
-		node.set("z_index", 100000)
+		node.set("z_index", 4095)
 		node.set("color", Color("#7daab8"))
 		streets_node.add_child(node)
 		node.call("set_map_ref", self)
