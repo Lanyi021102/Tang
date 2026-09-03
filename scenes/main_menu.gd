@@ -455,8 +455,19 @@ func _lotus_flower(c: Vector2, s: float) -> void:
 	for k in range(5):
 		var a := float(k) / 5.0 * TAU + 0.5
 		var pc := c + Vector2(cos(a), sin(a)) * 3.0 * s
-		_ellipse(pc, Vector2(3.2 * s, 1.7 * s), p, a)
+		# 使用三角形绘制椭圆避免 triangulate_polygon 失败
+		_draw_ellipse_triangles(pc, Vector2(3.2 * s, 1.7 * s), p, a)
 	draw_circle(c, 2.4 * s, core)
+
+func _draw_ellipse_triangles(c: Vector2, radius: Vector2, color: Color, rot := 0.0) -> void:
+	# 使用多个小三角形绘制椭圆，避免 triangulate_polygon 失败
+	var steps := 24
+	for i in range(steps):
+		var a1 := float(i) / steps * TAU + rot
+		var a2 := float(i + 1) / steps * TAU + rot
+		var p1 := c + Vector2(cos(a1) * radius.x, sin(a1) * radius.y)
+		var p2 := c + Vector2(cos(a2) * radius.x, sin(a2) * radius.y)
+		draw_colored_polygon(PackedVector2Array([c, p1, p2]), color)
 
 func _draw_figures() -> void:
 	var f := INK_SOFT
@@ -726,7 +737,11 @@ func _text_center(font: Font, text: String, size: float, color: Color, center: V
 	draw_string(font, Vector2(center.x - w * 0.5, baseline_y), text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
 
 func _poly(points: PackedVector2Array, color: Color) -> void:
+	if points.size() < 3:
+		return
 	var idx := Geometry2D.triangulate_polygon(points)
+	if idx.size() == 0:
+		return
 	for t in range(0, idx.size(), 3):
 		var tri := PackedVector2Array([points[idx[t]], points[idx[t + 1]], points[idx[t + 2]]])
 		draw_colored_polygon(tri, color)
@@ -746,6 +761,10 @@ func _round_rect_pts(r: Rect2, radius: float) -> PackedVector2Array:
 	var y := r.position.y
 	var w := r.size.x
 	var h := r.size.y
+	# 限制 radius 不超过 rect 尺寸的一半
+	var max_r := minf(w, h) * 0.5
+	if radius > max_r:
+		radius = max_r
 	var pts := PackedVector2Array()
 	var seg := 8
 	# top-left
