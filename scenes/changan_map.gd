@@ -284,6 +284,7 @@ func _ew_y(si: int) -> float:
 	for i in range(si):
 		y += float(EW_FANG_DEPTHS[i]) + float(EW_STREET_WIDTHS[i])
 	return y
+	return y
 
 
 func point_grid_position(p: Dictionary) -> Vector2:
@@ -452,10 +453,8 @@ func _build_world() -> void:
 			node.set("fang_w", fang_ew_width * STEP)
 			node.set("fang_h", fang_ns_depth * STEP)
 			node.set("cell", Vector2(ci, si))
-			node.set("z_index", int(fy + fang_ns_depth * 0.5) + 1000)
-			
+			node.set("z_index", int((fy + fang_ns_depth * 0.5) * 0.4))
 			# 贴图已清除，不分配贴图
-			
 			fangs_node.add_child(node)
 			node.call("set_map_ref", self)
 	# ---- 创建东西向街道（只覆盖坊区域，不覆盖全城）----
@@ -488,7 +487,7 @@ func _build_world() -> void:
 		node.set("tile_type", "东西街道")
 		node.set("road_width", int(float(EW_STREET_WIDTHS[mini(si, 13)])))
 		node.set("road_length", int(road_len))
-		node.set("z_index", int(road_y) + 1000)
+		node.set("z_index", int(road_y * 0.4))
 		node.set("color", Color("#8fb8c9"))
 		streets_node.add_child(node)
 		node.call("set_map_ref", self)
@@ -520,7 +519,7 @@ func _build_world() -> void:
 		node.set("tile_type", "南北街道")
 		node.set("road_width", int(float(NS_STREET_WIDTHS[mini(ci, 10)])))
 		node.set("road_length", int(road_len))
-		node.set("z_index", 100000)
+		node.set("z_index", 4095)
 		node.set("color", Color("#7daab8"))
 		streets_node.add_child(node)
 		node.call("set_map_ref", self)
