@@ -23,6 +23,10 @@ var uv_scale_ns := 1.0
 var uv_rotation_degrees := 0.0
 # =============================================
 
+var _name_vp: SubViewport
+var _name_tex: ViewportTexture
+var _name_tex_size := 0.0
+
 const SIDE := Color("#8a7348")
 const INK := Color("#3a362e")
 
@@ -129,13 +133,60 @@ func _draw() -> void:
 			zoom = 1.0
 		var fs := 14.0 / zoom
 		var font: Font = map.font_song
-		var w: float = font.get_string_size(fang_name, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-		var o := 1.0 / zoom
-		var off := 26.0 / zoom
-		for ox in [-o, o]:
-			for oy in [-o, o]:
-				draw_string(font, Vector2(-w * 0.5 + ox, -off + oy), fang_name, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0.95, 0.92, 0.85, 0.9))
-		draw_string(font, Vector2(-w * 0.5, -off), fang_name, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, INK)
+		var chars := fang_name.split("")
+		var char_w := 0.0
+		for c in chars:
+			char_w = maxf(char_w, font.get_string_size(c, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x)
+		var line_h := fs * 1.15
+		var px := fs * 0.4
+		var py := fs * 0.3
+		var cw := char_w + px * 2.0
+		var ch := line_h * chars.size() + py * 2.0
+		var rect := Rect2(-cw * 0.5, -ch * 0.5, cw, ch)
+		draw_rect(rect, Color(0.12, 0.10, 0.08, 0.85))
+		draw_rect(rect, Color(0.75, 0.68, 0.55, 0.6), false, maxf(1.0 / zoom, 1.0))
+		# 用缓存的 Viewport 贴图绘制文字（清晰）
+		_ensure_name_tex(fs, font, chars, char_w, line_h, px, py, cw, ch)
+		if _name_tex != null:
+			draw_texture(_name_tex, Vector2(-cw * 0.5, -ch * 0.5))
+		else:
+			# 首帧贴图未就绪，直接用 draw_string 兜底
+			var text_color := Color(0.95, 0.92, 0.85)
+			for i in range(chars.size()):
+				var c: String = chars[i]
+				var cx_w: float = font.get_string_size(c, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+				var cy := -ch * 0.5 + py + line_h * i + fs * 0.8
+				draw_string(font, Vector2(-cx_w * 0.5, cy), c, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, text_color)
+
+func _ensure_name_tex(fs: float, font: Font, chars: Array, char_w: float, line_h: float, px: float, py: float, cw: float, ch: float) -> void:
+	if _name_tex != null and absf(_name_tex_size - fs) < 1.0:
+		return
+	_name_tex_size = fs
+	if _name_vp != null:
+		_name_vp.queue_free()
+	_name_vp = SubViewport.new()
+	_name_vp.size = Vector2i(ceili(cw), ceili(ch))
+	_name_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	_name_vp.transparent_bg = true
+	var lbl := Label.new()
+	lbl.text = ""
+	for c in chars:
+		lbl.text += c + "\n"
+	lbl.text = lbl.text.strip_edges()
+	lbl.autowrap_mode = TextServer.AUTOWRAP_OFF
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lbl.add_theme_font_override("font", font)
+	lbl.add_theme_font_size_override("font_size", ceili(fs))
+	lbl.add_theme_color_override("font_color", Color(0.95, 0.92, 0.85))
+	lbl.position = Vector2.ZERO
+	lbl.size = Vector2(ceili(cw), ceili(ch))
+	_name_vp.add_child(lbl)
+	add_child(_name_vp)
+	_name_tex = _name_vp.get_texture()
+
+func set_map_ref(m) -> void:
+	map = m
 
 func set_map_ref(m) -> void:
 	map = m

@@ -63,6 +63,7 @@ var _hover_alpha := {}  # key -> 悬停描边透明度（随时间渐入渐出�
 var _btn_near: TextureButton
 var _btn_mid: TextureButton
 var _btn_far: TextureButton
+var _card_textures: Dictionary = {}
 var _hist_clip: Control
 var _codex_clip: Control
 
@@ -78,9 +79,23 @@ func _ready() -> void:
 	_create_clip_containers()
 	_btn_mid = get_node("../HUD/BtnMid")
 	_btn_far = get_node("../HUD/BtnFar")
+	_load_card_textures()
 	# 延迟到下一帧同步切换按钮位置，确保 map 已赋值
 	_sync_left_toggle_btn.call_deferred()
 	_sync_timeline_toggle_btn.call_deferred()
+
+func _load_card_textures() -> void:
+	var paths := {
+		"gate": "res://prototypes/knowledge-cards/assets/zhuque-gate-form-reference.png",
+		"fang": "res://prototypes/knowledge-cards/assets/fang-main-transparent.png",
+		"road": "res://prototypes/knowledge-cards/assets/zhuque-avenue-main.png",
+		"canal": "res://prototypes/knowledge-cards/assets/yongan-canal-main.png",
+		"building": "res://prototypes/knowledge-cards/assets/building-main-transparent.png",
+	}
+	for key in paths:
+		var path: String = paths[key]
+		if ResourceLoader.exists(path):
+			_card_textures[key] = load(path)
 
 # 创建列表裁剪容器（clip_contents 实现遮罩式裁剪）
 func _create_clip_containers() -> void:
@@ -815,21 +830,262 @@ func _draw_panel() -> void:
 	_fade = a
 	var r: Rect2 = map.BUILDING_PANEL_RECT
 	r.position.x += (1.0 - a) * 240.0
-	_draw_ink_panel(r, true, 14.0, a)
-	_draw_ink_header(Rect2(r.position, Vector2(r.size.x, 40)), true, 14.0, a)
+	# Match prototypes/knowledge-cards/gallery.html: 390×660, deep green and gilt.
+	_round_rect_fill(r, 29.0, _ca(Color("#06261a"), a))
+	_round_rect_fill(Rect2(r.position + Vector2(0, r.size.y * 0.48), Vector2(r.size.x, r.size.y * 0.52)), 29.0, _ca(Color("#0b3526"), a))
+	_round_rect_stroke(r, 29.0, _ca(Color("#c99b45", 0.45), a), 1.0)
 	var name := String(map._selected.get("name", ""))
 	var type := String(map._selected.get("type", ""))
-	_text_left(map.font_song, name, 17.0, _ca(Color("#f2e6cc"), a), Vector2(r.position.x + 14, r.position.y + 25))
-	var nw: float = map.font_song.get_string_size(name, HORIZONTAL_ALIGNMENT_LEFT, -1, 17.0).x
-	_text_left(map.font_hei, type, 11.0, _ca(Color("#d8c9a0"), a), Vector2(r.position.x + 18 + nw, r.position.y + 25))
-	var cb := Rect2(r.end.x - 34.0, r.position.y + 7.0, 24.0, 24.0)
-	_draw_ink_close(cb, a, "building_close")
-	var body := Rect2(r.position.x + 14, r.position.y + 48, r.size.x - 28, r.size.y - 48 - 72)
-	_draw_intro(body)
-	var src := String(map._selected.get("source", ""))
-	_text_left(map.font_hei, "出处：" + src, 10.0, _ca(Color("#d8c9a0"), a), Vector2(r.position.x + 14, r.end.y - 64))
-	if not map._typing_intro:
-		_draw_followup_buttons(r)
+	var key := String(map._selected.get("key", ""))
+	_text_left(map.font_hei, _entity_kind(type).to_upper() + " · " + _entity_type_en(type), 11.0, _ca(Color("#c99b45"), a), Vector2(r.position.x + 26.0, r.position.y + 34.0))
+	_text_right(map.font_hei, key, 10.0, _ca(Color("#9aaa94"), a), Vector2(r.end.x - 48.0, r.position.y + 34.0))
+	var cb: Rect2 = map.building_close_rect()
+	_round_rect_fill(cb, 9.0, _ca(Color("#c99b45", 0.18), a))
+	var cc := cb.get_center()
+	draw_line(cc + Vector2(-3, -3), cc + Vector2(3, 3), _ca(Color("#dfc784"), a), 1.5)
+	draw_line(cc + Vector2(-3, 3), cc + Vector2(3, -3), _ca(Color("#dfc784"), a), 1.5)
+
+	var p: Dictionary = map._selected
+	if map._knowledge_card_back:
+		_draw_card_back(p, type, r, a)
+	else:
+		_draw_card_front(p, type, r, a)
+
+func _draw_card_front(p: Dictionary, type: String, r: Rect2, a: float) -> void:
+	var name := String(p.get("name", ""))
+	var subtitle := _card_subtitle(p, type)
+	_text_left(map.font_hei, _card_pinyin(name), 11.0, _ca(Color("#98702f"), a), Vector2(r.position.x + 26.0, r.position.y + 66.0))
+	_text_left(map.font_song, name, 45.0, _ca(Color("#c99b45"), a), Vector2(r.position.x + 26.0, r.position.y + 112.0))
+	_text_left(map.font_hei, subtitle, 12.0, _ca(Color("#dfc784"), a), Vector2(r.position.x + 27.0, r.position.y + 133.0))
+	var image_rect := Rect2(r.position.x, r.position.y + 148.0, r.size.x, 350.0)
+	draw_rect(image_rect, _ca(Color("#0e3a29"), a))
+	var tex := _card_texture_for(p, type)
+	if tex:
+		var texture_key := _card_texture_key(p, type)
+		if texture_key == "fang" or texture_key == "building":
+			_draw_texture_contain(tex, image_rect.grow(-10.0), a)
+		else:
+			_draw_texture_cover(tex, image_rect, a)
+	else:
+		_text_center(map.font_song, _entity_symbol(type), 110.0, _ca(Color("#c99b45"), a), image_rect.get_center())
+	draw_line(Vector2(image_rect.position.x, image_rect.position.y), Vector2(image_rect.end.x, image_rect.position.y), _ca(Color("#c99b45", 0.22), a), 1.0)
+	draw_line(Vector2(image_rect.position.x, image_rect.end.y), Vector2(image_rect.end.x, image_rect.end.y), _ca(Color("#c99b45", 0.22), a), 1.0)
+	_text_right(map.font_hei, _image_note(p, type), 9.0, _ca(Color("#dfc784"), a), Vector2(r.end.x - 15.0, image_rect.end.y - 12.0))
+
+	var x := r.position.x + 26.0
+	var w := r.size.x - 52.0
+	var y := image_rect.end.y + 18.0
+	var desc := String(p.get("description", "暂无简介"))
+	_draw_card_text(desc, x, y, w, 3, a, Color("#dfc784"), 12.0)
+	_text_left(map.font_hei, String(p.get("period", "隋—唐")), 12.0, _ca(Color("#c99b45"), a), Vector2(x, r.end.y - 35.0))
+	_text_left(map.font_hei, "长安城知识图鉴 · 点击卡片翻面", 9.0, _ca(Color("#9aaa94"), a), Vector2(x, r.end.y - 19.0))
+	var seal := Rect2(r.end.x - 72.0, r.end.y - 66.0, 46.0, 46.0)
+	draw_rect(seal, _ca(Color("#c99b45"), a), false, 1.0)
+	_text_center(map.font_song, _entity_symbol(type), 23.0, _ca(Color("#c99b45"), a), seal.get_center())
+
+func _draw_card_back(p: Dictionary, type: String, r: Rect2, a: float) -> void:
+	var x := r.position.x + 18.0
+	var w := r.size.x - 36.0
+	var y := r.position.y + 72.0
+	_text_center(map.font_song, _card_subtitle(p, type), 20.0, _ca(Color("#c99b45"), a), Vector2(r.get_center().x, y + 8.0))
+	y += 28.0
+	var symbol_rect := Rect2(r.get_center().x - 47.0, y, 94.0, 94.0)
+	draw_circle(symbol_rect.get_center(), 46.0, _ca(Color("#0d3828"), a))
+	draw_arc(symbol_rect.get_center(), 46.0, 0.0, TAU, 48, _ca(Color("#c99b45"), a), 2.0)
+	_text_center(map.font_song, _entity_symbol(type), 35.0, _ca(Color("#c99b45"), a), symbol_rect.get_center())
+	y = symbol_rect.end.y + 22.0
+	for row in _basic_rows(p, type):
+		y = _draw_card_row(String(row[0]), String(row[1]), x, y, w, a)
+	y += 10.0
+	_text_left(map.font_song, "空间与知识关系", 13.0, _ca(Color("#c99b45"), a), Vector2(x, y + 13.0))
+	y += 23.0
+	for line in _relation_lines(p, type):
+		y = _draw_card_relation(String(line), x, y, w, a)
+	y += 5.0
+	var quote := String(p.get("quote", ""))
+	if quote == "":
+		quote = "暂无可展示的原文摘录"
+	var evidence_rect := Rect2(x, y, w, minf(112.0, r.end.y - 30.0 - y))
+	_round_rect_fill(evidence_rect, 8.0, _ca(Color("#04130c"), a))
+	draw_line(evidence_rect.position, Vector2(evidence_rect.position.x, evidence_rect.end.y), _ca(Color("#c99b45"), a), 2.0)
+	_text_left(map.font_hei, "史料原文", 10.0, _ca(Color("#c99b45"), a), Vector2(x + 10.0, y + 16.0))
+	_draw_card_text("“" + quote + "”", x + 10.0, y + 23.0, w - 20.0, 4, a, Color("#c8c6ae"), 11.0)
+	_text_right(map.font_hei, "点击卡片返回正面", 9.0, _ca(Color("#9aaa94"), a), Vector2(r.end.x - 26.0, r.end.y - 14.0))
+
+func _card_texture_for(p: Dictionary, type: String) -> Texture2D:
+	return _card_textures.get(_card_texture_key(p, type))
+
+func _card_texture_key(p: Dictionary, type: String) -> String:
+	var name := String(p.get("name", ""))
+	if name == "朱雀门" or type.contains("门"):
+		return "gate"
+	if type == "坊" or type.contains("里坊"):
+		return "fang"
+	if type.contains("渠") or type.contains("水"):
+		return "canal"
+	if type.contains("路") or type.contains("街") or type.contains("道"):
+		return "road"
+	return "building"
+
+func _entity_symbol(type: String) -> String:
+	var kind := _entity_kind(type)
+	return "门" if kind == "城门" else ("街" if kind == "道路" else ("坊" if kind == "坊" else "筑"))
+
+func _draw_texture_contain(tex: Texture2D, rect: Rect2, a: float) -> void:
+	var size := tex.get_size()
+	if size.x <= 0.0 or size.y <= 0.0:
+		return
+	var scale := minf(rect.size.x / size.x, rect.size.y / size.y)
+	var draw_size := size * scale
+	var dest := Rect2(rect.get_center() - draw_size * 0.5, draw_size)
+	draw_texture_rect(tex, dest, false, _ca(Color.WHITE, a))
+
+func _draw_texture_cover(tex: Texture2D, rect: Rect2, a: float) -> void:
+	var size := tex.get_size()
+	if size.x <= 0.0 or size.y <= 0.0:
+		return
+	var source_aspect := size.x / size.y
+	var dest_aspect := rect.size.x / rect.size.y
+	var source := Rect2(Vector2.ZERO, size)
+	if source_aspect > dest_aspect:
+		var crop_w := size.y * dest_aspect
+		source.position.x = (size.x - crop_w) * 0.5
+		source.size.x = crop_w
+	else:
+		var crop_h := size.x / dest_aspect
+		source.position.y = (size.y - crop_h) * 0.53
+		source.size.y = crop_h
+	draw_texture_rect_region(tex, rect, source, Color(0.80, 0.76, 0.66, a))
+
+func _entity_type_en(type: String) -> String:
+	var kind := _entity_kind(type)
+	return "GATE" if kind == "城门" else ("ROAD" if kind == "道路" else ("FANG" if kind == "坊" else "BUILDING"))
+
+func _card_pinyin(name: String) -> String:
+	var known := {"朱雀门": "ZHŪ QUÈ MÉN", "朱雀大街": "ZHŪ QUÈ DÀ JIĒ", "永安渠": "YǑNG ĀN QÚ", "大兴善寺": "DÀ XĪNG SHÀN SÌ", "兴庆坊": "XĪNG QÌNG FĀNG"}
+	return String(known.get(name, "CHANG'AN · KNOWLEDGE CARD"))
+
+func _card_subtitle(p: Dictionary, type: String) -> String:
+	var name := String(p.get("name", ""))
+	var known := {"朱雀门": "皇城正南门 · 中轴之门", "朱雀大街": "外郭城南北中轴", "永安渠": "城市供水与园林水系", "大兴善寺": "大型寺院建筑群", "兴庆坊": "长安城东部里坊"}
+	if known.has(name):
+		return String(known[name])
+	var zone := String(p.get("zone", "长安城"))
+	return zone + " · " + _entity_kind(type)
+
+func _image_note(p: Dictionary, type: String) -> String:
+	var key := _card_texture_key(p, type)
+	if key == "gate":
+		return "形制参考图 · 非唐长安直接复原证据"
+	if key == "fang":
+		return "坊市空间视觉参考"
+	if key == "road":
+		return "道路场景示意图"
+	if key == "canal":
+		return "城市水渠生活场景示意图"
+	return "建筑形制视觉参考"
+
+func _draw_card_row(label: String, value: String, x: float, y: float, w: float, a: float) -> float:
+	if value == "":
+		return y
+	_text_left(map.font_hei, label, 10.0, _ca(Color("#98702f"), a), Vector2(x, y + 13.0))
+	_text_left(map.font_hei, _shorten(value, 30), 11.0, _ca(Color("#dfc784"), a), Vector2(x + 58.0, y + 13.0))
+	draw_line(Vector2(x, y + 19.0), Vector2(x + w, y + 19.0), _ca(Color("#c99b45", 0.22), a), 1.0)
+	return y + 23.0
+
+func _draw_card_relation(text: String, x: float, y: float, w: float, a: float) -> float:
+	draw_circle(Vector2(x + 4.0, y + 7.0), 2.3, _ca(Color("#c99b45"), a))
+	_text_left(map.font_hei, _shorten(text, 43), 10.5, _ca(Color("#b9c4b5"), a), Vector2(x + 13.0, y + 12.0))
+	return y + 18.0
+
+func _draw_card_text(text: String, x: float, y: float, w: float, max_lines: int, a: float, color: Color, fs: float) -> float:
+	draw_multiline_string(map.font_hei, Vector2(x, y + map.font_hei.get_ascent(fs)), text, HORIZONTAL_ALIGNMENT_LEFT, w, fs, max_lines, _ca(color, a), BRK)
+	return y + float(max_lines) * (fs + 4.0)
+
+func _shorten(text: String, limit: int) -> String:
+	return text if text.length() <= limit else text.substr(0, limit - 1) + "…"
+
+func _entity_kind(type: String) -> String:
+	if type.contains("门"):
+		return "城门"
+	if type.contains("路") or type.contains("街") or type.contains("道"):
+		return "道路"
+	if type == "坊" or type.contains("里坊"):
+		return "坊"
+	return type if type != "" else "实体"
+
+func _basic_rows(p: Dictionary, type: String) -> Array:
+	var rows: Array = []
+	var zone := String(p.get("zone", ""))
+	var period := String(p.get("period", ""))
+	var aliases := String(p.get("aliases", ""))
+	var location := String(p.get("location", ""))
+	var function_text := String(p.get("function", ""))
+	var built := String(p.get("built", ""))
+	if zone != "": rows.append(["所属", zone])
+	if period != "": rows.append(["时期", period])
+	if aliases != "": rows.append(["别名", aliases.replace(";", "、")])
+	if type.contains("门"):
+		if location != "": rows.append(["位置", location])
+		if function_text != "": rows.append(["功能", function_text])
+	elif type.contains("路") or type.contains("街") or type.contains("道"):
+		if location != "": rows.append(["走向", location])
+		if function_text != "": rows.append(["作用", function_text])
+	else:
+		if location != "": rows.append(["位置", location])
+		if function_text != "": rows.append(["功能", function_text])
+	if built != "": rows.append(["建造/沿革", built])
+	return rows.slice(0, 5)
+
+func _relation_lines(p: Dictionary, type: String) -> Array:
+	var lines: Array = []
+	var location := String(p.get("location", ""))
+	var function_text := String(p.get("function", ""))
+	var zone := String(p.get("zone", ""))
+	if type.contains("门"):
+		if zone != "": lines.append("位于「%s」，是城市空间的重要出入口" % zone)
+		if location != "": lines.append("方位关系：" + location)
+		if function_text != "": lines.append("连接功能：" + function_text)
+	elif type.contains("路") or type.contains("街") or type.contains("道"):
+		if zone != "": lines.append("道路所在区域：" + zone)
+		if location != "": lines.append("沿线路径：" + location)
+		if function_text != "": lines.append("道路作用：" + function_text)
+	else:
+		if zone != "": lines.append("所属城区：" + zone)
+		if location != "": lines.append("坊区定位：" + location)
+		if function_text != "": lines.append("坊内主要活动：" + function_text)
+	if lines.is_empty():
+		lines.append("相关实体关系正在整理中")
+	return lines.slice(0, 3)
+
+func _draw_section_title(title: String, x: float, y: float, w: float, a: float) -> float:
+	draw_line(Vector2(x, y + 16.0), Vector2(x + w, y + 16.0), _ca(Color("#d4c7a9"), a), 1.0)
+	_round_rect_fill(Rect2(x, y + 3.0, 82.0, 22.0), 11.0, _ca(Color("#e3d8bd"), a))
+	_text_center(map.font_song, title, 12.0, _ca(DAIQING, a), Vector2(x + 41.0, y + 14.0))
+	return y + 31.0
+
+func _draw_knowledge_row(label: String, value: String, x: float, y: float, w: float, a: float) -> float:
+	if value == "":
+		return y
+	_text_left(map.font_hei, label, 11.0, _ca(Color("#8a7655"), a), Vector2(x + 2.0, y + 14.0))
+	var shown := value
+	if shown.length() > 28:
+		shown = shown.substr(0, 27) + "…"
+	_text_left(map.font_hei, shown, 12.0, _ca(INK, a), Vector2(x + 68.0, y + 14.0))
+	return y + 21.0
+
+func _draw_knowledge_text(text: String, x: float, y: float, w: float, max_lines: int, a: float, color: Color) -> float:
+	var fs := 12.0
+	draw_multiline_string(map.font_hei, Vector2(x + 2.0, y + map.font_hei.get_ascent(fs)), text, HORIZONTAL_ALIGNMENT_LEFT, w - 4.0, fs, max_lines, _ca(color, a), BRK)
+	return y + float(max_lines) * 17.0
+
+func _draw_relation_line(text: String, x: float, y: float, w: float, a: float) -> float:
+	draw_circle(Vector2(x + 5.0, y + 8.0), 2.5, _ca(JIN, a))
+	var shown := text
+	if shown.length() > 42:
+		shown = shown.substr(0, 41) + "…"
+	_text_left(map.font_hei, shown, 11.0, _ca(INK_SOFT, a), Vector2(x + 14.0, y + 13.0))
+	return y + 19.0
 
 func _draw_intro(rect: Rect2) -> void:
 	var fs := 14.0
