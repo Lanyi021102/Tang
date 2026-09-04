@@ -638,6 +638,28 @@ func _build_world() -> void:
 						node.set("uv_rotation_degrees", uv.rot)
 			fangs_node.add_child(node)
 			node.call("set_map_ref", self)
+	# ---- 皇宫大贴图（覆盖 ci=3-6, si=0-3 共12坊区域）----
+	var palace_tex_path := "res://assets/fang/皇宫01.png"
+	print("=== 皇宫贴图路径: " + palace_tex_path + " 存在: " + str(ResourceLoader.exists(palace_tex_path)) + " ===")
+	if ResourceLoader.exists(palace_tex_path):
+		var palace_sprite := Sprite2D.new()
+		palace_sprite.name = "皇宫贴图"
+		var loaded_tex = load(palace_tex_path)
+		print("=== 皇宫贴图加载: " + str(loaded_tex != null) + " ===")
+		palace_sprite.texture = loaded_tex
+		# 直接用坐标函数计算，避免常量缓存不一致
+		var palace_w := _ns_x(7) - (_ns_x(3) + float(NS_STREET_WIDTHS[3]))
+		var palace_h := (_ew_y(4)) - float(EW_STREET_WIDTHS[0])
+		var px := _ns_x(3) + float(NS_STREET_WIDTHS[3]) + palace_w * 0.5 - palace_w * 0.02  # W方向偏移2%
+		var py := float(EW_STREET_WIDTHS[0]) + palace_h * 0.5
+		palace_sprite.position = _step_iso(px, py)
+		palace_sprite.scale = Vector2(16.8, 16.0)  # 水平拉伸5%  # 扩大到1600%
+		print("=== 皇宫贴图: pos=" + str(px) + "," + str(py) + " ===")
+		palace_sprite.z_index = 10000
+		fangs_node.add_child(palace_sprite)
+		print("=== 皇宫贴图已添加 ===")
+	else:
+		print("=== 皇宫贴图文件不存在! ===")
 	var fang_area_ew := float(NS_FANG_WIDTHS.reduce(func(a, b): return a + b, 0)) + float(NS_STREET_WIDTHS.reduce(func(a, b): return a + b, 0))  # = 9663
 	var fang_area_ns := float(EW_FANG_DEPTHS.reduce(func(a, b): return a + b, 0)) + float(EW_STREET_WIDTHS.reduce(func(a, b): return a + b, 0)) - float(EW_STREET_WIDTHS[0]) - float(EW_STREET_WIDTHS[13])  # 不含南北边界路
 	for si in range(15):
