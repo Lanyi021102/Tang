@@ -3,6 +3,10 @@ extends Node2D
 
 var map
 
+const TW := 128.0
+const TH := 64.0
+const GRID_COLS := 12
+const GRID_ROWS := 13
 const STEP := 0.1
 const GROUND := Color("#d8ccab")
 const CITY_ROAD := Color("#8fb8c9")

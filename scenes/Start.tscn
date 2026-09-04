@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://bstarts00001"]
 
-[ext_resource type="Script" path="res://scenes/start.gd" id="1_start"]
+[ext_resource type="Script" path="res://scenes/opening_ui.gd" id="1_start"]
 
 [node name="Start" type="Control"]
 layout_mode = 3

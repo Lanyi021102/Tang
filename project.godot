@@ -10,7 +10,7 @@ config_version=5
 
 [application]
 
-config/name="Damoxing"
+config/name="长安营造司：百坊城局"
 run/main_scene="res://scenes/Start.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
 config/icon="res://icon.svg"
@@ -26,14 +26,14 @@ SceneTransition="*res://autoload/SceneTransition.gd"
 
 [display]
 
-window/size/viewport_width=1280
-window/size/viewport_height=720
+window/size/viewport_width=1920
+window/size/viewport_height=1080
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/godot_mcp/plugin.cfg")
+enabled=PackedStringArray()
 
 [physics]
 

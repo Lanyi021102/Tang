@@ -1,4 +1,4 @@
-extends Node2D
+﻿extends Node2D
 
 # 唐长安城 2.5D 45°等距鸟瞰场景
 # Tang Chang'an — 45° isometric bird's-eye view, 3 zoom levels via mouse wheel.
@@ -7,9 +7,10 @@ const MENU_SCENE := "res://scenes/MainMenu.tscn"
 const UI_SCRIPT := preload("res://scenes/ui_overlay.gd")
 const FANG_DIR := "res://assets/fang/"
 
-const GROUP_CHAT_RECT := Rect2(138.0, 128.0, 348.0, 430.0)
-const BUILDING_PANEL_RECT := Rect2(884.0, 199.0, 360.0, 385.0)
-const HIST_TIMELINE_RECT := Rect2(88.0, 648.0, 1104.0, 50.0)
+const CLOCK_RECT := Rect2(1156.0, 16.0, 84.0, 84.0)
+const GROUP_CHAT_RECT := Rect2(940.0, 120.0, 300.0, 380.0)
+const BUILDING_PANEL_RECT := Rect2(850.0, 30.0, 390.0, 660.0)
+const HIST_TIMELINE_RECT := Rect2(180.0, 652.0, 920.0, 54.0)
 const HIST_YEAR_MIN := 582
 const HIST_YEAR_MAX := 907
 # 右上角时间指示区域（地平线 + 太阳月亮）点击可切换时辰
@@ -21,7 +22,58 @@ const CODEX_CATS := ["衣食住行", "建筑与城市规划", "历史"]
 const TW := 128.0
 const TH := 64.0
 const GRID_COLS := 12
-const GRID_ROWS := 9
+const GRID_ROWS := 13
+# 图谱项目坐标以历史城区中心为原点；游戏网格以左上角为原点。
+# 东侧坊在底图上比西侧多占一列，因此使用独立的横向偏移。
+const WEST_POINT_GRID_OFFSET := Vector2(5.0, 3.0)
+const EAST_POINT_GRID_OFFSET := Vector2(6.0, 3.0)
+
+# ==================== 唐长安城真实布局数据 ====================
+# 每步对应的像素尺寸（可调）
+const STEP := 0.1
+
+# 14 条东西大街路宽（步）—— 表格左侧奇数行 C 列
+const EW_STREET_WIDTHS := [19, 40, 155, 40, 120, 44, 40, 54, 55, 55, 54, 59, 39, 19]
+# 13 行坊的南北纵深（步）—— 表格左侧偶数行 C 列
+const EW_FANG_DEPTHS := [736, 737, 814, 814, 500, 544, 540, 515, 525, 530, 520, 530, 590]
+# 东西大街名称（与 EW_STREET_WIDTHS 对应）
+const EW_STREET_NAMES := [
+	"外郭城东西第一街", "外郭城东西第二街", "外郭城东西第三街", "外郭城东西第四街",
+	"外郭城东西第五街", "外郭城东西第六街", "外郭城东西第七街", "外郭城东西第八街",
+	"外郭城东西第九街", "外郭城东西第十街", "外郭城东西第十一街", "外郭城东西第十二街",
+	"外郭城东西第十三街", "外郭城东西第十四街",
+]
+
+# 11 条南北大街路宽（步）—— 表格底部 Row 30 偶数列
+const NS_STREET_WIDTHS := [20, 42, 63, 108, 63, 155, 67, 134, 68, 68, 25]
+# 10 列坊的东西宽度（步）—— 表格底部 Row 30 奇数列
+const NS_FANG_WIDTHS := [1115, 1033, 1020, 683, 558, 562, 700, 1022, 1032, 1125]
+# 南北大街名称（与 NS_STREET_WIDTHS 对应）
+const NS_STREET_NAMES := [
+	"朱雀门街西第五街", "朱雀门街西第四街", "朱雀门街西第三街", "朱雀门街西第二街",
+	"朱雀门街西第一街", "朱雀门街", "朱雀门街东第一街", "朱雀门街东第二街",
+	"朱雀门街东第三街", "朱雀门街东第四街", "朱雀门街东第五街",
+]
+
+# 每条东西大街两侧的坊名（西→东，10 个）
+# 街 1-4：中间 7 个为皇城，只渲染西侧 3 坊 + 东侧 3 坊
+# 街 5-14：全部 10 坊
+const EW_FANG_NAMES := [
+	["修真坊","安定坊","修德坊","","","","","光宅坊","长乐坊","入苑坊"],
+	["普宁坊","休祥坊","辅兴坊","","","","","永昌坊","太宁坊","兴宁坊"],
+	["义宁坊","金城坊","颁政坊","","","","","永兴坊","安兴坊","永嘉坊"],
+	["居德坊","醴泉坊","布政坊","","","","","崇仁坊","胜业坊","兴庆宫"],
+	["群贤坊","西市","延寿坊","太平坊","光禄坊","兴道坊","务本坊","平康坊","东市","道政坊"],
+	["怀德坊","西市","光德坊","通义坊","殖业坊","开化坊","崇义坊","宣阳坊","东市","常乐坊"],
+	["崇化坊","怀远坊","延康坊","兴化坊","丰乐坊","安仁坊","长兴坊","亲仁坊","安邑坊","靖恭坊"],
+	["丰邑坊","长寿坊","崇贤坊","崇德坊","安业坊","光福坊","永乐坊","永宁坊","宣平坊","新昌坊"],
+	["待贤坊","嘉会坊","延福坊","怀贞坊","崇业坊","靖善坊","靖安坊","永崇坊","升平坊","升道坊"],
+	["永和坊","永平坊","永安坊","宣义坊","永达坊","兰陵坊","安善坊","昭国坊","修行坊","立政坊"],
+	["常安坊","通轨坊","敦义坊","丰安坊","道德坊","开明坊","大业坊","晋昌坊","修政坊","敦化坊"],
+	["和平坊","归义坊","大通坊","昌明坊","光行坊","保宁坊","昌乐坊","通善坊","青龙坊","缺名"],
+	["永阳坊","昭行坊","大安坊","安乐坊","延祚坊","安义坊","安德坊","通济坊","曲池坊","芙蓉园"],
+]
+# 注：第 14 街（最后一街）南侧无坊，数据保留为空
 
 # ==================== 唐长安城真实布局数据 ====================
 # 每步对应的像素尺寸（可调）
@@ -74,7 +126,9 @@ var font_song: Font
 var font_hei: Font
 var _points: Array = []
 var _cfg: Dictionary = {}
-var _fang_tex: Array = []
+var _square_tex: Array = []  # 正方形坊贴图
+var _rect_tex: Array = []    # 长方形坊贴图
+var _fang_tex_map: Dictionary = {}  # 坊名 -> 贴图（按名精确匹配 + 分级回落）
 var _camera: Camera2D
 
 var _selected: Dictionary = {}
@@ -140,6 +194,7 @@ var _cam_to_pos := Vector2.ZERO
 var _panel_raw := 1.0
 var _panel_anim_t := 1.0
 var _panel_opening := true
+var _knowledge_card_back := false
 var _chat_scroll := 0.0
 var _groups: Array = []
 var _pending_group := -1
@@ -172,8 +227,8 @@ var _markers_node
 var _outline_layer
 
 # camera zoom state
-const ZOOM_LEVELS := [0.008, 0.015, 0.025, 0.04, 0.07, 0.12, 0.2, 0.3]
-var _zoom_idx := 3
+const ZOOM_LEVELS := [0.008, 0.04, 0.3]
+var _zoom_idx := 1
 var _target_zoom := 1.2
 var _target_pos := Vector2.ZERO
 var _free_pan := false
@@ -266,30 +321,37 @@ func _iso(c: float, r: float) -> Vector2:
 func _step_iso(sx: float, sy: float) -> Vector2:
 	return Vector2((sx - sy) * STEP * 64.0, (sx + sy) * STEP * 32.0)
 
-# 第 si 条东西大街北边缘的 y 坐标（步）
-# 布局：街0 → 坊0 → 街1 → 坊1 → ... → 街13
-func _ew_y(si: int) -> float:
-	var y := 0.0
-	for i in range(si):
-		y += float(EW_STREET_WIDTHS[i])
-		if i < EW_FANG_DEPTHS.size():
-			y += float(EW_FANG_DEPTHS[i])
-	return y
-
-# 第 ci 条南北大街西边缘的 x 坐标（步）
-# 布局：街0 → 坊0 → 街1 → 坊1 → ... → 街10
+# 第 ci 列坊的西侧 X 步坐标（累加坊宽+街宽）
 func _ns_x(ci: int) -> float:
 	var x := 0.0
 	for i in range(ci):
-		x += float(NS_STREET_WIDTHS[i])
-		if i < NS_FANG_WIDTHS.size():
-			x += float(NS_FANG_WIDTHS[i])
+		x += float(NS_FANG_WIDTHS[i]) + float(NS_STREET_WIDTHS[i])
 	return x
+
+# 第 si 行坊的北侧 Y 步坐标（累加坊深+街宽）
+func _ew_y(si: int) -> float:
+	var y := 0.0
+	for i in range(si):
+		y += float(EW_FANG_DEPTHS[i]) + float(EW_STREET_WIDTHS[i])
+	return y
+	return y
+
+
+func point_grid_position(p: Dictionary) -> Vector2:
+	if not p.has("grid_x") or not p.has("grid_y"):
+		return Vector2(6.0, 6.0)
+	var source_x := float(p.get("grid_x", 0.0))
+	var offset := EAST_POINT_GRID_OFFSET if source_x > 0.0 else WEST_POINT_GRID_OFFSET
+	return Vector2(
+		source_x + offset.x,
+		float(p.get("grid_y", 0.0)) + offset.y
+	)
 
 func _ready() -> void:
 	_setup_fonts()
 	_sync_from_data()
 	_build_fangs()
+	_assign_generic_fang_textures()
 	_build_camera()
 	_build_lights()
 	_build_world()
@@ -323,14 +385,111 @@ func _sync_from_data() -> void:
 	_year_display = float(_current_year)
 
 func _build_fangs() -> void:
-	_fang_tex.clear()
-	for n in ["fang_a.png", "fang_b.png", "fang_c.png"]:
-		var p: String = FANG_DIR + n
+	# 贴图加载：按坊名匹配正式图，找不到再按分级回落（贵族/平民）
+	_square_tex.clear()
+	_rect_tex.clear()
+	_fang_tex_map.clear()
+	var names := [
+		"安仁坊", "布政坊", "崇仁坊", "靖善坊", "平康坊", "亲仁坊", "善和坊",
+		"太平坊", "通化坊", "通义坊", "宣阳坊", "东市", "西市",
+		"贵族坊1", "贵族坊2", "贵族坊3", "贵族坊4",
+		"平民坊1", "平民坊2", "平民坊3", "平民坊4",
+	]
+	for n in names:
+		var p: String = "res://assets/fang/" + n + ".png"
 		if ResourceLoader.exists(p):
-			_fang_tex.append(load(p))
-		else:
-			_fang_tex.append(null)
+			_fang_tex_map[n] = load(p)
+	print("=== 坊贴图加载完毕：%d 张 ===" % _fang_tex_map.size())
 
+# 给某个坊取贴图：只返回精确匹配的专属贴图，无匹配则返回null（显示纯色）
+func _fang_tex_for(fname: String, si: int, ci: int) -> Texture2D:
+	# 东市使用西市贴图
+	if fname == "东市":
+		return _fang_tex_map.get("西市", null)
+	# 特定坊使用贵族坊贴图
+	if fname == "丰乐坊":
+		return _fang_tex_map.get("贵族坊3", null)
+	if fname == "安业坊":
+		return _fang_tex_map.get("贵族坊4", null)
+	if fname == "群贤坊":
+		return _fang_tex_map.get("贵族坊1", null)
+	if fname == "怀德坊":
+		return _fang_tex_map.get("贵族坊2", null)
+	if fname == "崇业坊":
+		return _fang_tex_map.get("平民坊1", null)
+	if fname == "兴化坊":
+		return _fang_tex_map.get("平民坊2", null)
+	if fname == "崇德坊":
+		return _fang_tex_map.get("平民坊3", null)
+	# 通用坊贴图分配查找
+	if _generic_fang_tex_assign.has(fname):
+		return _fang_tex_map.get(_generic_fang_tex_assign[fname], null)
+	if _fang_tex_map.has(fname):
+		return _fang_tex_map[fname]
+	return null
+
+var _generic_fang_tex_assign: Dictionary = {}  # 坊名 -> 分配的贴图名（通用坊随机分配）
+
+# 贴图UV参数表：贴图名 -> {ew, ns, rot}
+var _tex_uv_params: Dictionary = {
+	"亲仁坊": {"ew": 1.26, "ns": 0.76, "rot": -1.0},
+	"安仁坊": {"ew": 1.031, "ns": 0.971, "rot": 0.5},
+	"崇仁坊": {"ew": 1.1, "ns": 0.9, "rot": 0.0},
+	"平康坊": {"ew": 1.3, "ns": 0.714, "rot": -2.0},
+	"宣阳坊": {"ew": 1.25, "ns": 0.714, "rot": -2.0},
+	"太平坊": {"ew": 1.111, "ns": 0.909, "rot": 0.0},
+	"通义坊": {"ew": 1.111, "ns": 0.909, "rot": 0.0},
+	"布政坊": {"ew": 0.962, "ns": 1.064, "rot": 0.0},
+	"贵族坊1": {"ew": 1.333, "ns": 0.694, "rot": -1.0},
+	"贵族坊2": {"ew": 1.333, "ns": 0.694, "rot": -1.0},
+	"贵族坊3": {"ew": 1.02, "ns": 1.02, "rot": 0.0},
+	"贵族坊4": {"ew": 1.02, "ns": 1.01, "rot": 0.0},
+	"平民坊1": {"ew": 1.0, "ns": 1.0, "rot": 0.0},
+	"平民坊2": {"ew": 1.176, "ns": 0.833, "rot": 0.0},
+	"平民坊3": {"ew": 1.163, "ns": 0.862, "rot": 0.0},
+	"靖善坊": {"ew": 1.0, "ns": 1.0, "rot": 0.0},
+}
+
+# 为无贴图的坊按区域规则随机分配贴图
+func _assign_generic_fang_textures() -> void:
+	# 第5-13街（si=4-12）第1-3列（ci=0-2）、第8-10列（ci=7-9）
+	var group_a = ["贵族坊1", "贵族坊2", "平康坊", "宣阳坊", "亲仁坊"]
+	# 第5-13街（si=4-12）第4列（ci=3）、第7列（ci=6）
+	var group_b = ["太平坊", "通义坊", "平民坊2", "平民坊3"]
+	# 第5-13街（si=4-12）第5-6列（ci=4-5）
+	var group_c = ["平民坊1", "贵族坊3", "贵族坊4", "安仁坊", "靖善坊"]
+	# 第1-4街（si=0-3）第1-3列（ci=0-2）、第8-10列（ci=7-9）
+	var group_d = ["布政坊", "崇仁坊"]
+	for si in range(13):
+		for ci in range(10):
+			if si >= EW_FANG_NAMES.size() or ci >= EW_FANG_NAMES[si].size():
+				continue
+			var fname = EW_FANG_NAMES[si][ci]
+			if fname == "":
+				continue
+			if _fang_tex_map.has(fname) or fname == "东市" or fname == "西市":
+				continue
+			if fname in ["丰乐坊", "安业坊", "群贤坊", "怀德坊", "崇业坊", "兴化坊", "崇德坊"]:
+				continue
+			var tex_name: String = ""
+			var h: int
+			if si >= 4:
+				if ci <= 2 or ci >= 7:
+					h = hash(Vector2i(ci + 100, si + 100))
+					tex_name = group_a[(h % group_a.size() + group_a.size()) % group_a.size()]
+				elif ci == 3 or ci == 6:
+					h = hash(Vector2i(ci + 200, si + 200))
+					tex_name = group_b[(h % group_b.size() + group_b.size()) % group_b.size()]
+				elif ci >= 4 and ci <= 5:
+					h = hash(Vector2i(ci + 300, si + 300))
+					tex_name = group_c[(h % group_c.size() + group_c.size()) % group_c.size()]
+			else:
+				if ci <= 2 or ci >= 7:
+					h = hash(Vector2i(ci + 400, si + 400))
+					tex_name = group_d[(h % group_d.size() + group_d.size()) % group_d.size()]
+			if tex_name != "":
+				_generic_fang_tex_assign[fname] = tex_name
+	print("=== 通用坊贴图分配完毕：%d 个坊 ===" % _generic_fang_tex_assign.size())
 func _build_camera() -> void:
 	_camera = get_node("Camera")
 	_camera.make_current()
@@ -432,6 +591,10 @@ func _build_world() -> void:
 			var fname: String = EW_FANG_NAMES[si][ci]
 			if fname == "":
 				continue
+			# ---- 西市/东市各占两行，合并为一个地块 ----
+			# 第二行（si=5）的市集跳过（已在第一行创建合并地块）
+			if (fname == "西市" or fname == "东市") and si == 5:
+				continue
 			var fang_ew_width := float(NS_FANG_WIDTHS[ci])  # 坊的东西宽度
 			var fx := _ns_x(ci) + float(NS_STREET_WIDTHS[ci])  # 坊列西边缘 x
 			# 创建坊节点
@@ -439,34 +602,91 @@ func _build_world() -> void:
 			node.set_script(FangScript)
 			node.name = "坊-%d-%d" % [si, ci]
 			var center_sx := fx + fang_ew_width * 0.5
-			var center_sy := fy + fang_ns_depth * 0.5
+			var center_sy: float
+			var draw_h: float = fang_ns_depth
+			# 市集（西市/东市）合并：跨两行高度
+			if (fname == "西市" or fname == "东市") and si == 4:
+				draw_h = fang_ns_depth + float(EW_STREET_WIDTHS[5]) + float(EW_FANG_DEPTHS[5])
+				center_sy = fy + draw_h * 0.5
+			else:
+				center_sy = fy + fang_ns_depth * 0.5
 			node.position = _step_iso(center_sx, center_sy)
 			node.set("fang_name", fname)
 			node.set("fang_w", fang_ew_width * STEP)
-			node.set("fang_h", fang_ns_depth * STEP)
+			node.set("fang_h", draw_h * STEP)
 			node.set("cell", Vector2(ci, si))
-			node.set("z_index", int(fy + fang_ns_depth * 0.5) + 1000)
+			node.set("z_index", int(center_sy * 0.4))
+			# 分配正式坊贴图
+			node.set("tex", _fang_tex_for(fname, si, ci))
+			# 坊特定UV缩放覆盖（无覆盖则使用默认值1.0）
+			if fname == "亲仁坊":
+				node.set("uv_scale_ew", 1.26)  # ew方向比之前再缩小5%
+				node.set("uv_scale_ns", 0.76)  # ns方向缩放
+				node.set("uv_rotation_degrees", -1.0)  # 逆时针旋转1度
+			if fname == "怀德坊":
+				node.set("uv_scale_ew", 1.333)
+				node.set("uv_scale_ns", 0.694)
+			if fname == "安仁坊":
+				node.set("uv_scale_ew", 1.031)  # ew方向缩小3%
+				node.set("uv_scale_ns", 0.971)  # ns方向扩大3%
+				node.set("uv_rotation_degrees", 0.5)  # 顺时针旋转0.5度
+			if fname == "崇仁坊":
+				node.set("uv_scale_ew", 1.1)  # ew方向缩小10%
+				node.set("uv_scale_ns", 0.9)  # ns方向扩大10%
+			if fname == "平康坊":
+				node.set("uv_scale_ew", 1.3)  # ew方向缩放
+				node.set("uv_scale_ns", 0.714)  # ns方向放大40%
+				node.set("uv_rotation_degrees", -2.0)  # 逆时针旋转2度
+			if fname == "宣阳坊":
+				node.set("uv_scale_ew", 1.25)  # ew方向缩小20%
+				node.set("uv_scale_ns", 0.714)  # ns方向放大40%
+				node.set("uv_rotation_degrees", -2.0)  # 逆时针旋转2度
+			if fname == "太平坊":
+				node.set("uv_scale_ew", 1.111)  # ew方向缩小10%
+				node.set("uv_scale_ns", 0.909)  # ns方向扩大10%
+			if fname == "通义坊":
+				node.set("uv_scale_ew", 1.111)  # ew方向缩小10%
+				node.set("uv_scale_ns", 0.909)  # ns方向扩大10%
+			if fname == "布政坊":
+				node.set("uv_scale_ew", 0.962)  # ew方向扩大4%
+				node.set("uv_scale_ns", 1.064)  # ns方向缩小6%
+			if fname == "西市":
+				node.set("uv_scale_ew", 1.042)  # ew方向缩小4%
+				node.set("uv_scale_ns", 0.952)  # ns方向扩大5%
+			if fname == "东市":
+				node.set("uv_scale_ew", 1.042)  # ew方向缩小4%
+				node.set("uv_scale_ns", 0.952)  # ns方向扩大5%
+			if fname == "安业坊":
+				node.set("uv_scale_ew", 1.02)  # ew方向缩小2%
+				node.set("uv_scale_ns", 1.01)  # ns方向缩小1%
+			if fname == "丰乐坊":
+				node.set("uv_scale_ew", 1.02)  # ew方向缩小2%
+				node.set("uv_scale_ns", 1.02)  # ns方向缩小2%
+			if fname == "群贤坊":
+				node.set("uv_scale_ew", 1.333)  # ew方向缩小25%
+				node.set("uv_scale_ns", 0.694)  # ns方向扩大44%
+				node.set("uv_rotation_degrees", -1.0)  # 逆时针旋转1度
+			if fname == "怀德坊":
+				node.set("uv_scale_ew", 1.333)
+				node.set("uv_scale_ns", 0.694)
+				node.set("uv_rotation_degrees", -1.0)  # 逆时针旋转1度
+			if fname == "兴化坊":
+				node.set("uv_scale_ew", 1.176)  # ew方向缩小15%
+				node.set("uv_scale_ns", 0.833)  # ns方向扩大20%
+			if fname == "崇德坊":
+				node.set("uv_scale_ew", 1.163)  # ew方向缩小14%
+				node.set("uv_scale_ns", 0.862)  # ns方向扩大16%
+			# 通用坊贴图UV参数：按分配的贴图名查找
+			if _generic_fang_tex_assign.has(fname):
+				var assigned_tex = _generic_fang_tex_assign[fname]
+				if _tex_uv_params.has(assigned_tex):
+					var uv = _tex_uv_params[assigned_tex]
+					node.set("uv_scale_ew", uv.ew)
+					node.set("uv_scale_ns", uv.ns)
+					if uv.rot != 0.0:
+						node.set("uv_rotation_degrees", uv.rot)
 			fangs_node.add_child(node)
 			node.call("set_map_ref", self)
-	# ---- 创建皇城（实际尺寸，无内部分割）----
-	var HuangchengScript = preload("res://scenes/huangcheng_tile.gd")
-	var hc_node := Node2D.new()
-	hc_node.set_script(HuangchengScript)
-	hc_node.name = "皇城"
-	# 皇城范围：EW街2→坊3（南北），NS街3→坊6（东西）
-	var hc_ns_start := _ns_x(3)
-	var hc_ew_start := _ew_y(2)
-	var hc_w := 2788*5
-	var hc_h := 3336*10
-	var hc_cx := hc_ns_start + 3336 * 0.45
-	var hc_cy := hc_ew_start + 2788 * 0.055
-	hc_node.position = _step_iso(hc_cx, hc_cy)
-	hc_node.set("fang_w", hc_w * STEP)
-	hc_node.set("fang_h", hc_h * STEP)
-	hc_node.set("z_index", int(hc_cy) + 1000)
-	fangs_node.add_child(hc_node)
-	hc_node.call("set_map_ref", self)
-	# ---- 创建东西向街道（只覆盖坊区域，不覆盖全城）----
 	var fang_area_ew := float(NS_FANG_WIDTHS.reduce(func(a, b): return a + b, 0)) + float(NS_STREET_WIDTHS.reduce(func(a, b): return a + b, 0))  # = 9663
 	var fang_area_ns := float(EW_FANG_DEPTHS.reduce(func(a, b): return a + b, 0)) + float(EW_STREET_WIDTHS.reduce(func(a, b): return a + b, 0)) - float(EW_STREET_WIDTHS[0]) - float(EW_STREET_WIDTHS[13])  # 不含南北边界路
 	for si in range(15):
@@ -496,7 +716,7 @@ func _build_world() -> void:
 		node.set("tile_type", "东西街道")
 		node.set("road_width", int(float(EW_STREET_WIDTHS[mini(si, 13)])))
 		node.set("road_length", int(road_len))
-		node.set("z_index", int(road_y) + 1000)
+		node.set("z_index", int(road_y * 0.4))
 		node.set("color", Color("#8fb8c9"))
 		streets_node.add_child(node)
 		node.call("set_map_ref", self)
@@ -528,7 +748,7 @@ func _build_world() -> void:
 		node.set("tile_type", "南北街道")
 		node.set("road_width", int(float(NS_STREET_WIDTHS[mini(ci, 10)])))
 		node.set("road_length", int(road_len))
-		node.set("z_index", 100000)
+		node.set("z_index", 4095)
 		node.set("color", Color("#7daab8"))
 		streets_node.add_child(node)
 		node.call("set_map_ref", self)
@@ -572,12 +792,13 @@ func _set_zoom(idx: int, snap: bool = false) -> void:
 func _cam_pos_for(idx: int) -> Vector2:
 	# 城市中心：东西 4831.5 步，南北 4334 步
 	var center := _step_iso(4831.5, 4334.0)
-	if idx == 0:
-		return center
-	elif idx == ZOOM_LEVELS.size() - 1:
-		return _near_fang_center()
-	else:
-		return center + Vector2(0, 200)
+	match idx:
+		0:
+			return _iso(6.0, 6.5) + Vector2(0, 40)
+		2:
+			return _near_fang_center()
+		_:
+			return _iso(6.0, 6.5) + Vector2(0, 40)
 
 func _near_fang_center() -> Vector2:
 	# 默认放大到城南区域（坊密集区）
@@ -794,7 +1015,7 @@ func group_chat_close_rect() -> Rect2:
 	return Rect2(GROUP_CHAT_RECT.end.x - 34.0, GROUP_CHAT_RECT.position.y + 7.0, 24.0, 24.0)
 
 func building_close_rect() -> Rect2:
-	return Rect2(BUILDING_PANEL_RECT.end.x - 34.0, BUILDING_PANEL_RECT.position.y + 7.0, 24.0, 24.0)
+	return Rect2(BUILDING_PANEL_RECT.end.x - 32.0, BUILDING_PANEL_RECT.position.y + 18.0, 18.0, 18.0)
 
 func followup_button_rect(i: int) -> Rect2:
 	var bx := BUILDING_PANEL_RECT.position.x + 14.0
@@ -1034,7 +1255,7 @@ func _process(delta: float) -> void:
 	if _follow_group >= 0 and _follow_group < _groups.size():
 		var fg: Dictionary = _groups[_follow_group]
 		_target_pos = _step_iso(fg["c"], fg["r"])
-		_target_zoom = ZOOM_LEVELS[ZOOM_LEVELS.size() - 1]
+		_target_zoom = ZOOM_LEVELS[2]
 	if _cam_anim:
 		_cam_anim_t += delta
 		var t := clampf(_cam_anim_t / _cam_anim_dur, 0.0, 1.0)
@@ -1342,15 +1563,9 @@ func _handle_click(screen_pos: Vector2) -> void:
 		if building_close_rect().has_point(screen_pos):
 			_deselect()
 			return
-		if not _typing_intro:
-			for i in range(3):
-				if followup_button_rect(i).has_point(screen_pos):
-					if i < 2 and _followups.size() >= 2:
-						ask_followup(String(_followups[i]["q"]))
-					else:
-						_deselect()
-					return
 		if BUILDING_PANEL_RECT.has_point(screen_pos):
+			_knowledge_card_back = not _knowledge_card_back
+			_ui.queue_redraw()
 			return
 	var sgi := _speaking_group_at(screen_pos)
 	if sgi >= 0:
@@ -1366,12 +1581,6 @@ func _handle_click(screen_pos: Vector2) -> void:
 	if fang.x >= 0:
 		_selected_fang = fang
 		_select(_fang_data(fang.x, fang.y))
-		_redraw_world()
-		return
-	# 皇城点击检测
-	if _huangcheng_at(world_pos):
-		_selected_fang = Vector2(-1, -1)
-		_select(_huangcheng_data())
 		_redraw_world()
 		return
 	var street := _street_at(world_pos)
@@ -1461,38 +1670,6 @@ func _fang_name_of(c: int, r: int) -> String:
 		if n != "":
 			return n
 	return "里坊"
-
-# 皇城点击检测
-func _huangcheng_at(world_pos: Vector2) -> bool:
-	var step := _world_to_step(world_pos)
-	var sx := step.x
-	var sy := step.y
-	var hc_x0 := _ns_x(3)
-	var hc_y0 := _ew_y(2)
-	var hc_w := float(NS_STREET_WIDTHS[3] + NS_FANG_WIDTHS[3] + NS_STREET_WIDTHS[4] + NS_FANG_WIDTHS[4] + NS_STREET_WIDTHS[5] + NS_FANG_WIDTHS[5] + NS_STREET_WIDTHS[6] + NS_FANG_WIDTHS[6])
-	var hc_h := float(EW_STREET_WIDTHS[2] + EW_FANG_DEPTHS[2] + EW_STREET_WIDTHS[3] + EW_FANG_DEPTHS[3])
-	return sx >= hc_x0 and sx < hc_x0 + hc_w and sy >= hc_y0 and sy < hc_y0 + hc_h
-
-# 皇城数据（用于点击后显示卡片）
-func _huangcheng_data() -> Dictionary:
-	var hc_w := float(NS_STREET_WIDTHS[3] + NS_FANG_WIDTHS[3] + NS_STREET_WIDTHS[4] + NS_FANG_WIDTHS[4] + NS_STREET_WIDTHS[5] + NS_FANG_WIDTHS[5] + NS_STREET_WIDTHS[6] + NS_FANG_WIDTHS[6])
-	var hc_h := float(EW_STREET_WIDTHS[2] + EW_FANG_DEPTHS[2] + EW_STREET_WIDTHS[3] + EW_FANG_DEPTHS[3])
-	return {
-		"key": "HUANGCHENG",
-		"name": "皇城",
-		"trad": "",
-		"type": "皇城",
-		"zone": "外郭城",
-		"description": "皇城，东西约%d步，南北约%d步。南面三门，东面二门，西面二门。内含中央官署、太庙、社稷坛等。" % [int(hc_w), int(hc_h)],
-		"location": "宫城之南，坊区之北",
-		"function": "中央官署所在地",
-		"built": "隋开皇二年（582年）",
-		"aliases": "子城",
-		"quote": "",
-		"source": "《唐两京城坊考》卷一",
-		"ew_size": int(hc_w),
-		"ns_size": int(hc_h),
-	}
 
 # 街道点击检测：返回 ["ew", idx] 或 ["ns", idx] 或空数组
 func _street_at(world_pos: Vector2) -> Array:
@@ -1711,8 +1888,8 @@ func _select_group(gi: int) -> void:
 		_panel_raw = 0.0
 		_panel_anim_t = 0.0
 	_follow_group = gi
-	_zoom_idx = ZOOM_LEVELS.size() - 1
-	_start_cam_anim(ZOOM_LEVELS[ZOOM_LEVELS.size() - 1], _step_iso(g["c"], g["r"]))
+	_zoom_idx = 2
+	_start_cam_anim(ZOOM_LEVELS[2], _step_iso(g["c"], g["r"]))
 	var names := PackedStringArray()
 	for m in g["members"]:
 		names.append(String(m["name"]))
@@ -1796,12 +1973,9 @@ func _detect_codex(text: String) -> void:
 
 func _hit_test(pos: Vector2) -> Dictionary:
 	for p in _points:
-		var gp: Vector2 = GRID_POS.get(String(p["key"]), Vector2(6, 4))
-		# 将旧网格坐标近似转换为步坐标
-		var sx := gp.x * 805.25
-		var sy := gp.y * 963.1
-		var c := _step_iso(sx, sy) + Vector2(0, -8)
-		if pos.distance_to(c) <= 180.0:
+		var gp := point_grid_position(p)
+		var c := _iso(gp.x, gp.y) + Vector2(0, -8)
+		if pos.distance_to(c) <= 18.0:
 			return p
 	return {}
 func _select(p: Dictionary) -> void:
@@ -1815,6 +1989,7 @@ func _select(p: Dictionary) -> void:
 	_panel_raw = 0.0
 	_panel_anim_t = 0.0
 	_panel_opening = true
+	_knowledge_card_back = false
 	_chat_scroll = 0.0
 	_intro_text = ""
 	_intro_visible = 0
@@ -1934,8 +2109,19 @@ func _build_prompt(p: Dictionary) -> String:
 	lines.append("【职能】" + String(p.get("function", "")))
 	if String(p.get("built", "")) != "":
 		lines.append("【建造/沿革】" + String(p["built"]))
-	if String(p.get("aliases", "")) != "":
-		lines.append("【别名】" + String(p["aliases"]))
+	var alias_texts := PackedStringArray()
+	var aliases: Variant = p.get("aliases", [])
+	if aliases is Array:
+		for alias in aliases:
+			var alias_item_text := str(alias).strip_edges()
+			if alias_item_text != "":
+				alias_texts.append(alias_item_text)
+	else:
+		var alias_value_text := str(aliases).strip_edges()
+		if alias_value_text != "":
+			alias_texts.append(alias_value_text)
+	if not alias_texts.is_empty():
+		lines.append("【别名】" + "、".join(alias_texts))
 	if String(p.get("quote", "")) != "":
 		lines.append("【原文引文】" + String(p["quote"]))
 	lines.append("【来源】" + String(p.get("source", "")))
