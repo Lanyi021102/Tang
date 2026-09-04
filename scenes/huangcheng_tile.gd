@@ -1,17 +1,15 @@
 extends Node2D
-# 单个坊（等距矩形 + 坊名标签）— 基于步坐标尺寸
+# 皇城实体（等距菱形 + 立体侧面，与坊相同形式）
 
-var fang_w := 1.0      # 坊东西宽度（步 × STEP）
-var fang_h := 1.0      # 坊南北深度（步 × STEP）
-var fang_name := ""
-var cell := Vector2.ZERO
+var fang_w := 1.0      # 东西宽度（步 × STEP）
+var fang_h := 1.0      # 南北深度（步 × STEP）
 var map
 
 var _name_vp: SubViewport
 var _name_tex: ViewportTexture
 var _name_tex_size := 0.0
 
-const SIDE := Color("#8a7348")
+const SIDE := Color("#a0522d")
 const INK := Color("#3a362e")
 
 func _ready() -> void:
@@ -19,12 +17,14 @@ func _ready() -> void:
 
 func _draw() -> void:
 	var fang_scale := 1.0
+	var zoom_idx := 0
 	if map != null:
 		var zoom: float = map._camera.zoom.x
+		zoom_idx = map._zoom_idx
 		if zoom < 0.01:
 			fang_scale = 0.1 / maxf(zoom, 0.0001)
-	var hw := fang_w * 0.5 * fang_scale * 9.9
-	var hh := fang_h * 0.5 * fang_scale * 9.9
+	var hw := fang_w * 0.5 * fang_scale * 2.0
+	var hh := fang_h * 0.5 * fang_scale * 1.0
 	var NW := Vector2((-hw - hh) * 6.4, (-hw + hh) * 3.2)
 	var NE := Vector2((hw - hh) * 6.4, (hw + hh) * 3.2)
 	var SE := Vector2((hw + hh) * 6.4, (hw - hh) * 3.2)
@@ -32,18 +32,19 @@ func _draw() -> void:
 	var dn := Vector2(0, 6)
 	_poly(PackedVector2Array([SW, SE, SE + dn, SW + dn]), SIDE.darkened(0.1))
 	_poly(PackedVector2Array([SE, NE, NE + dn, SE + dn]), SIDE.darkened(0.3))
-	_poly(PackedVector2Array([NW, NE, SE, SW]), Color("#cdbb8f"))
+	_poly(PackedVector2Array([NW, NE, SE, SW]), Color("#c4783e"))
 	var outline := PackedVector2Array([NW, NE, SE, SW, NW])
 	for i in range(4):
 		draw_line(outline[i], outline[i + 1], Color.BLACK, 3.0)
-	# 坊名卡片（仅远景显示，竖排居中于菱形）
-	if fang_name != "" and map != null and map._zoom_idx == 0:
+	# 仅远景：竖排卡片式名字（居中于菱形）
+	if map != null and zoom_idx == 0:
 		var zoom: float = map._camera.zoom.x
 		if zoom <= 0.0:
 			zoom = 1.0
-		var fs := 14.0 / zoom
+		var name := "皇城"
+		var fs := 18.0 / zoom
 		var font: Font = map.font_song
-		var chars := fang_name.split("")
+		var chars := name.split("")
 		var char_w := 0.0
 		for c in chars:
 			char_w = maxf(char_w, font.get_string_size(c, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x)
@@ -54,13 +55,11 @@ func _draw() -> void:
 		var ch := line_h * chars.size() + py * 2.0
 		var rect := Rect2(-cw * 0.5, -ch * 0.5, cw, ch)
 		draw_rect(rect, Color(0.12, 0.10, 0.08, 0.85))
-		draw_rect(rect, Color(0.75, 0.68, 0.55, 0.6), false, maxf(1.0 / zoom, 1.0))
-		# 用缓存的 Viewport 贴图绘制文字（清晰）
+		draw_rect(rect, Color(0.85, 0.72, 0.50, 0.6), false, maxf(1.5 / zoom, 1.5))
 		_ensure_name_tex(fs, font, chars, char_w, line_h, px, py, cw, ch)
 		if _name_tex != null:
 			draw_texture(_name_tex, Vector2(-cw * 0.5, -ch * 0.5))
 		else:
-			# 首帧贴图未就绪，直接用 draw_string 兜底
 			var text_color := Color(0.95, 0.92, 0.85)
 			for i in range(chars.size()):
 				var c: String = chars[i]

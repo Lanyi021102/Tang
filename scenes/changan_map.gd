@@ -172,8 +172,8 @@ var _markers_node
 var _outline_layer
 
 # camera zoom state
-const ZOOM_LEVELS := [0.008, 0.04, 0.3]
-var _zoom_idx := 1
+const ZOOM_LEVELS := [0.008, 0.015, 0.025, 0.04, 0.07, 0.12, 0.2, 0.3]
+var _zoom_idx := 3
 var _target_zoom := 1.2
 var _target_pos := Vector2.ZERO
 var _free_pan := false
@@ -297,7 +297,7 @@ func _ready() -> void:
 	_init_npcs()
 	_sync_hud_guards()
 	NetworkManager.chat_response.connect(_on_chat_response)
-	_set_zoom(1, true)
+	_set_zoom(3, true)
 	_redraw_world()
 
 func _setup_fonts() -> void:
@@ -448,6 +448,24 @@ func _build_world() -> void:
 			node.set("z_index", int(fy + fang_ns_depth * 0.5) + 1000)
 			fangs_node.add_child(node)
 			node.call("set_map_ref", self)
+	# ---- 创建皇城（实际尺寸，无内部分割）----
+	var HuangchengScript = preload("res://scenes/huangcheng_tile.gd")
+	var hc_node := Node2D.new()
+	hc_node.set_script(HuangchengScript)
+	hc_node.name = "皇城"
+	# 皇城范围：EW街2→坊3（南北），NS街3→坊6（东西）
+	var hc_ns_start := _ns_x(3)
+	var hc_ew_start := _ew_y(2)
+	var hc_w := 2788*5
+	var hc_h := 3336*10
+	var hc_cx := hc_ns_start + 3336 * 0.45
+	var hc_cy := hc_ew_start + 2788 * 0.055
+	hc_node.position = _step_iso(hc_cx, hc_cy)
+	hc_node.set("fang_w", hc_w * STEP)
+	hc_node.set("fang_h", hc_h * STEP)
+	hc_node.set("z_index", int(hc_cy) + 1000)
+	fangs_node.add_child(hc_node)
+	hc_node.call("set_map_ref", self)
 	# ---- 创建东西向街道（只覆盖坊区域，不覆盖全城）----
 	var fang_area_ew := float(NS_FANG_WIDTHS.reduce(func(a, b): return a + b, 0)) + float(NS_STREET_WIDTHS.reduce(func(a, b): return a + b, 0))  # = 9663
 	var fang_area_ns := float(EW_FANG_DEPTHS.reduce(func(a, b): return a + b, 0)) + float(EW_STREET_WIDTHS.reduce(func(a, b): return a + b, 0)) - float(EW_STREET_WIDTHS[0]) - float(EW_STREET_WIDTHS[13])  # 不含南北边界路
@@ -529,29 +547,37 @@ func _build_ui() -> void:
 
 # ==================== zoom ====================
 func _set_zoom(idx: int, snap: bool = false) -> void:
+	var new_idx := clampi(idx, 0, ZOOM_LEVELS.size() - 1)
+	if new_idx == _zoom_idx:
+		return
 	_cam_anim = false
 	_follow_group = -1
-	_zoom_idx = clampi(idx, 0, ZOOM_LEVELS.size() - 1)
+	_zoom_idx = new_idx
 	_target_zoom = ZOOM_LEVELS[_zoom_idx]
 	if snap:
 		_target_pos = _cam_pos_for(_zoom_idx)
 		_camera.zoom = Vector2(_target_zoom, _target_zoom)
 		_camera.position = _target_pos
 	_free_pan = false
-	GameManager.set_view_mode(["far", "mid", "near"][_zoom_idx])
+	var _view_mode := "far" if _zoom_idx == 0 else ("near" if _zoom_idx == ZOOM_LEVELS.size() - 1 else "mid")
+	GameManager.set_view_mode(_view_mode)
 	if _ui:
 		_ui.queue_redraw()
+	# 缩放变化时触发坊和皇城重绘（更新名字显示）
+	var fangs_node = get_node_or_null("World/Fangs")
+	if fangs_node:
+		for child in fangs_node.get_children():
+			child.queue_redraw()
 
 func _cam_pos_for(idx: int) -> Vector2:
 	# 城市中心：东西 4831.5 步，南北 4334 步
 	var center := _step_iso(4831.5, 4334.0)
-	match idx:
-		0:
-			return center
-		2:
-			return _near_fang_center()
-		_:
-			return center + Vector2(0, 200)
+	if idx == 0:
+		return center
+	elif idx == ZOOM_LEVELS.size() - 1:
+		return _near_fang_center()
+	else:
+		return center + Vector2(0, 200)
 
 func _near_fang_center() -> Vector2:
 	# 默认放大到城南区域（坊密集区）
@@ -989,10 +1015,10 @@ func _update_tilt_shift(delta: float) -> void:
 	var target_y := 0.5
 	var target_band := 0.4
 	var target_blur := 0.14
-	if _zoom_idx == 1:
+	if _zoom_idx >= 3 and _zoom_idx < ZOOM_LEVELS.size() - 1:
 		target_band = 0.3
 		target_blur = 0.32
-	elif _zoom_idx == 2:
+	elif _zoom_idx >= ZOOM_LEVELS.size() - 1:
 		target_band = 0.2
 		target_blur = 0.6
 	_ts_focus_y = lerpf(_ts_focus_y, target_y, delta * 4.0)
@@ -1008,7 +1034,7 @@ func _process(delta: float) -> void:
 	if _follow_group >= 0 and _follow_group < _groups.size():
 		var fg: Dictionary = _groups[_follow_group]
 		_target_pos = _step_iso(fg["c"], fg["r"])
-		_target_zoom = ZOOM_LEVELS[2]
+		_target_zoom = ZOOM_LEVELS[ZOOM_LEVELS.size() - 1]
 	if _cam_anim:
 		_cam_anim_t += delta
 		var t := clampf(_cam_anim_t / _cam_anim_dur, 0.0, 1.0)
@@ -1342,6 +1368,12 @@ func _handle_click(screen_pos: Vector2) -> void:
 		_select(_fang_data(fang.x, fang.y))
 		_redraw_world()
 		return
+	# 皇城点击检测
+	if _huangcheng_at(world_pos):
+		_selected_fang = Vector2(-1, -1)
+		_select(_huangcheng_data())
+		_redraw_world()
+		return
 	var street := _street_at(world_pos)
 	if not street.is_empty():
 		_selected_fang = Vector2(-1, -1)
@@ -1429,6 +1461,38 @@ func _fang_name_of(c: int, r: int) -> String:
 		if n != "":
 			return n
 	return "里坊"
+
+# 皇城点击检测
+func _huangcheng_at(world_pos: Vector2) -> bool:
+	var step := _world_to_step(world_pos)
+	var sx := step.x
+	var sy := step.y
+	var hc_x0 := _ns_x(3)
+	var hc_y0 := _ew_y(2)
+	var hc_w := float(NS_STREET_WIDTHS[3] + NS_FANG_WIDTHS[3] + NS_STREET_WIDTHS[4] + NS_FANG_WIDTHS[4] + NS_STREET_WIDTHS[5] + NS_FANG_WIDTHS[5] + NS_STREET_WIDTHS[6] + NS_FANG_WIDTHS[6])
+	var hc_h := float(EW_STREET_WIDTHS[2] + EW_FANG_DEPTHS[2] + EW_STREET_WIDTHS[3] + EW_FANG_DEPTHS[3])
+	return sx >= hc_x0 and sx < hc_x0 + hc_w and sy >= hc_y0 and sy < hc_y0 + hc_h
+
+# 皇城数据（用于点击后显示卡片）
+func _huangcheng_data() -> Dictionary:
+	var hc_w := float(NS_STREET_WIDTHS[3] + NS_FANG_WIDTHS[3] + NS_STREET_WIDTHS[4] + NS_FANG_WIDTHS[4] + NS_STREET_WIDTHS[5] + NS_FANG_WIDTHS[5] + NS_STREET_WIDTHS[6] + NS_FANG_WIDTHS[6])
+	var hc_h := float(EW_STREET_WIDTHS[2] + EW_FANG_DEPTHS[2] + EW_STREET_WIDTHS[3] + EW_FANG_DEPTHS[3])
+	return {
+		"key": "HUANGCHENG",
+		"name": "皇城",
+		"trad": "",
+		"type": "皇城",
+		"zone": "外郭城",
+		"description": "皇城，东西约%d步，南北约%d步。南面三门，东面二门，西面二门。内含中央官署、太庙、社稷坛等。" % [int(hc_w), int(hc_h)],
+		"location": "宫城之南，坊区之北",
+		"function": "中央官署所在地",
+		"built": "隋开皇二年（582年）",
+		"aliases": "子城",
+		"quote": "",
+		"source": "《唐两京城坊考》卷一",
+		"ew_size": int(hc_w),
+		"ns_size": int(hc_h),
+	}
 
 # 街道点击检测：返回 ["ew", idx] 或 ["ns", idx] 或空数组
 func _street_at(world_pos: Vector2) -> Array:
@@ -1647,8 +1711,8 @@ func _select_group(gi: int) -> void:
 		_panel_raw = 0.0
 		_panel_anim_t = 0.0
 	_follow_group = gi
-	_zoom_idx = 2
-	_start_cam_anim(ZOOM_LEVELS[2], _step_iso(g["c"], g["r"]))
+	_zoom_idx = ZOOM_LEVELS.size() - 1
+	_start_cam_anim(ZOOM_LEVELS[ZOOM_LEVELS.size() - 1], _step_iso(g["c"], g["r"]))
 	var names := PackedStringArray()
 	for m in g["members"]:
 		names.append(String(m["name"]))
