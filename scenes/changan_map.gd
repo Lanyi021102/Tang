@@ -7,9 +7,10 @@ const MENU_SCENE := "res://scenes/MainMenu.tscn"
 const UI_SCRIPT := preload("res://scenes/ui_overlay.gd")
 const FANG_DIR := "res://assets/fang/"
 
-const GROUP_CHAT_RECT := Rect2(138.0, 128.0, 348.0, 430.0)
-const BUILDING_PANEL_RECT := Rect2(884.0, 199.0, 360.0, 385.0)
-const HIST_TIMELINE_RECT := Rect2(88.0, 648.0, 1104.0, 50.0)
+const CLOCK_RECT := Rect2(1156.0, 16.0, 84.0, 84.0)
+const GROUP_CHAT_RECT := Rect2(940.0, 120.0, 300.0, 380.0)
+const BUILDING_PANEL_RECT := Rect2(850.0, 30.0, 390.0, 660.0)
+const HIST_TIMELINE_RECT := Rect2(180.0, 652.0, 920.0, 54.0)
 const HIST_YEAR_MIN := 582
 const HIST_YEAR_MAX := 907
 # 右上角时间指示区域（地平线 + 太阳月亮）点击可切换时辰
@@ -146,6 +147,7 @@ var _cam_to_pos := Vector2.ZERO
 var _panel_raw := 1.0
 var _panel_anim_t := 1.0
 var _panel_opening := true
+var _knowledge_card_back := false
 var _chat_scroll := 0.0
 var _groups: Array = []
 var _pending_group := -1
@@ -799,7 +801,7 @@ func group_chat_close_rect() -> Rect2:
 	return Rect2(GROUP_CHAT_RECT.end.x - 34.0, GROUP_CHAT_RECT.position.y + 7.0, 24.0, 24.0)
 
 func building_close_rect() -> Rect2:
-	return Rect2(BUILDING_PANEL_RECT.end.x - 34.0, BUILDING_PANEL_RECT.position.y + 7.0, 24.0, 24.0)
+	return Rect2(BUILDING_PANEL_RECT.end.x - 32.0, BUILDING_PANEL_RECT.position.y + 18.0, 18.0, 18.0)
 
 func followup_button_rect(i: int) -> Rect2:
 	var bx := BUILDING_PANEL_RECT.position.x + 14.0
@@ -1347,15 +1349,9 @@ func _handle_click(screen_pos: Vector2) -> void:
 		if building_close_rect().has_point(screen_pos):
 			_deselect()
 			return
-		if not _typing_intro:
-			for i in range(3):
-				if followup_button_rect(i).has_point(screen_pos):
-					if i < 2 and _followups.size() >= 2:
-						ask_followup(String(_followups[i]["q"]))
-					else:
-						_deselect()
-					return
 		if BUILDING_PANEL_RECT.has_point(screen_pos):
+			_knowledge_card_back = not _knowledge_card_back
+			_ui.queue_redraw()
 			return
 	var sgi := _speaking_group_at(screen_pos)
 	if sgi >= 0:
@@ -1779,6 +1775,7 @@ func _select(p: Dictionary) -> void:
 	_panel_raw = 0.0
 	_panel_anim_t = 0.0
 	_panel_opening = true
+	_knowledge_card_back = false
 	_chat_scroll = 0.0
 	_intro_text = ""
 	_intro_visible = 0
