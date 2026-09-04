@@ -75,6 +75,53 @@ const EW_FANG_NAMES := [
 ]
 # 注：第 14 街（最后一街）南侧无坊，数据保留为空
 
+# ==================== 唐长安城真实布局数据 ====================
+# 每步对应的像素尺寸（可调）
+const STEP := 0.1
+
+# 14 条东西大街路宽（步）—— 表格左侧奇数行 C 列
+const EW_STREET_WIDTHS := [19, 40, 155, 40, 120, 44, 40, 54, 55, 55, 54, 59, 39, 19]
+# 13 行坊的南北纵深（步）—— 表格左侧偶数行 C 列
+const EW_FANG_DEPTHS := [736, 737, 814, 814, 500, 544, 540, 515, 525, 530, 520, 530, 590]
+# 东西大街名称（与 EW_STREET_WIDTHS 对应）
+const EW_STREET_NAMES := [
+	"外郭城东西第一街", "外郭城东西第二街", "外郭城东西第三街", "外郭城东西第四街",
+	"外郭城东西第五街", "外郭城东西第六街", "外郭城东西第七街", "外郭城东西第八街",
+	"外郭城东西第九街", "外郭城东西第十街", "外郭城东西第十一街", "外郭城东西第十二街",
+	"外郭城东西第十三街", "外郭城东西第十四街",
+]
+
+# 11 条南北大街路宽（步）—— 表格底部 Row 30 偶数列
+const NS_STREET_WIDTHS := [20, 42, 63, 108, 63, 155, 67, 134, 68, 68, 25]
+# 10 列坊的东西宽度（步）—— 表格底部 Row 30 奇数列
+const NS_FANG_WIDTHS := [1115, 1033, 1020, 683, 558, 562, 700, 1022, 1032, 1125]
+# 南北大街名称（与 NS_STREET_WIDTHS 对应）
+const NS_STREET_NAMES := [
+	"朱雀门街西第五街", "朱雀门街西第四街", "朱雀门街西第三街", "朱雀门街西第二街",
+	"朱雀门街西第一街", "朱雀门街", "朱雀门街东第一街", "朱雀门街东第二街",
+	"朱雀门街东第三街", "朱雀门街东第四街", "朱雀门街东第五街",
+]
+
+# 每条东西大街两侧的坊名（西→东，10 个）
+# 街 1-4：中间 7 个为皇城，只渲染西侧 3 坊 + 东侧 3 坊
+# 街 5-14：全部 10 坊
+const EW_FANG_NAMES := [
+	["修真坊","安定坊","修德坊","","","","","光宅坊","长乐坊","入苑坊"],
+	["普宁坊","休祥坊","辅兴坊","","","","","永昌坊","太宁坊","兴宁坊"],
+	["义宁坊","金城坊","颁政坊","","","","","永兴坊","安兴坊","永嘉坊"],
+	["居德坊","醴泉坊","布政坊","","","","","崇仁坊","胜业坊","兴庆宫"],
+	["群贤坊","西市","延寿坊","太平坊","光禄坊","兴道坊","务本坊","平康坊","东市","道政坊"],
+	["怀德坊","西市","光德坊","通义坊","殖业坊","开化坊","崇义坊","宣阳坊","东市","常乐坊"],
+	["崇化坊","怀远坊","延康坊","兴化坊","丰乐坊","安仁坊","长兴坊","亲仁坊","安邑坊","靖恭坊"],
+	["丰邑坊","长寿坊","崇贤坊","崇德坊","安业坊","光福坊","永乐坊","永宁坊","宣平坊","新昌坊"],
+	["待贤坊","嘉会坊","延福坊","怀贞坊","崇业坊","靖善坊","靖安坊","永崇坊","升平坊","升道坊"],
+	["永和坊","永平坊","永安坊","宣义坊","永达坊","兰陵坊","安善坊","昭国坊","修行坊","立政坊"],
+	["常安坊","通轨坊","敦义坊","丰安坊","道德坊","开明坊","大业坊","晋昌坊","修政坊","敦化坊"],
+	["和平坊","归义坊","大通坊","昌明坊","光行坊","保宁坊","昌乐坊","通善坊","青龙坊","缺名"],
+	["永阳坊","昭行坊","大安坊","安乐坊","延祚坊","安义坊","安德坊","通济坊","曲池坊","芙蓉园"],
+]
+# 注：第 14 街（最后一街）南侧无坊，数据保留为空
+
 var font_song: Font
 var font_hei: Font
 var _points: Array = []
@@ -312,7 +359,7 @@ func _ready() -> void:
 	_init_npcs()
 	_sync_hud_guards()
 	NetworkManager.chat_response.connect(_on_chat_response)
-	_set_zoom(1, true)
+	_set_zoom(3, true)
 	_redraw_world()
 
 func _setup_fonts() -> void:
@@ -720,18 +767,27 @@ func _build_ui() -> void:
 
 # ==================== zoom ====================
 func _set_zoom(idx: int, snap: bool = false) -> void:
+	var new_idx := clampi(idx, 0, ZOOM_LEVELS.size() - 1)
+	if new_idx == _zoom_idx:
+		return
 	_cam_anim = false
 	_follow_group = -1
-	_zoom_idx = clampi(idx, 0, ZOOM_LEVELS.size() - 1)
+	_zoom_idx = new_idx
 	_target_zoom = ZOOM_LEVELS[_zoom_idx]
 	if snap:
 		_target_pos = _cam_pos_for(_zoom_idx)
 		_camera.zoom = Vector2(_target_zoom, _target_zoom)
 		_camera.position = _target_pos
 	_free_pan = false
-	GameManager.set_view_mode(["far", "mid", "near"][_zoom_idx])
+	var _view_mode := "far" if _zoom_idx == 0 else ("near" if _zoom_idx == ZOOM_LEVELS.size() - 1 else "mid")
+	GameManager.set_view_mode(_view_mode)
 	if _ui:
 		_ui.queue_redraw()
+	# 缩放变化时触发坊和皇城重绘（更新名字显示）
+	var fangs_node = get_node_or_null("World/Fangs")
+	if fangs_node:
+		for child in fangs_node.get_children():
+			child.queue_redraw()
 
 func _cam_pos_for(idx: int) -> Vector2:
 	# 城市中心：东西 4831.5 步，南北 4334 步
@@ -1180,10 +1236,10 @@ func _update_tilt_shift(delta: float) -> void:
 	var target_y := 0.5
 	var target_band := 0.4
 	var target_blur := 0.14
-	if _zoom_idx == 1:
+	if _zoom_idx >= 3 and _zoom_idx < ZOOM_LEVELS.size() - 1:
 		target_band = 0.3
 		target_blur = 0.32
-	elif _zoom_idx == 2:
+	elif _zoom_idx >= ZOOM_LEVELS.size() - 1:
 		target_band = 0.2
 		target_blur = 0.6
 	_ts_focus_y = lerpf(_ts_focus_y, target_y, delta * 4.0)
