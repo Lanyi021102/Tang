@@ -30,8 +30,8 @@ func _ready():
 	sans=_font(["Microsoft YaHei","PingFang SC","Noto Sans CJK SC"])
 	bg=load("res://assets/ui/home_full.png")
 	paper=load("res://assets/ui/ink/ui_paper_fiber_tile.png")
-	title_art=load("res://assets/ui/title_changan_works.png")
-	subtitle_art=load("res://assets/ui/subtitle_changan_works.png")
+	title_art=load("res://assets/ui/title_changan_works.png") if ResourceLoader.exists("res://assets/ui/title_changan_works.png") else null
+	subtitle_art=load("res://assets/ui/subtitle_changan_works.png") if ResourceLoader.exists("res://assets/ui/subtitle_changan_works.png") else null
 	for path in ["res://assets/ui/home_codex_button.png","res://assets/ui/home_settings_button.png","res://assets/ui/home_enter_button.png","res://assets/ui/home_archive_button.png","res://assets/ui/home_value_button.png","res://assets/ui/home_task_button.png"]:
 		button_tex.append(load(path))
 	set_process(true)
