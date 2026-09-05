@@ -210,6 +210,8 @@ var _zoom_idx := 0
 var _target_zoom := 0.0095
 var _target_pos := Vector2.ZERO
 var _free_pan := false
+# 坊名上次按 zoom 校准的相机缩放（用于在缩放动画期间逐帧重绘，消除名称大小滞后）
+var _last_fang_label_zoom := -1.0
 
 # drag state
 var _dragging := false
@@ -831,6 +833,19 @@ func _wheel_zoom(dir: int) -> void:
 	if _ui:
 		_ui.queue_redraw()
 	# 缩放变化时触发坊和皇城重绘（更新名字显示）
+	_refresh_fang_labels()
+
+# 名称字号按实时 zoom 计算（fs=14/zoom，屏幕恒定）；缩放动画期间相机 zoom 每帧变化，
+# 若不逐帧重绘校准，名称会先随地图放大、动画结束又不回落，观感明显滞后。
+# 此函数在 _process 每帧相机更新后调用：zoom 与上次校准值有差异时重绘坊标签。
+func _sync_fang_label_zoom() -> void:
+	var z: float = _camera.zoom.x
+	if absf(z - _last_fang_label_zoom) <= 0.0002:
+		return
+	_last_fang_label_zoom = z
+	_refresh_fang_labels()
+
+func _refresh_fang_labels() -> void:
 	var fangs_node = get_node_or_null("World/Fangs")
 	if fangs_node:
 		for child in fangs_node.get_children():
@@ -1315,6 +1330,7 @@ func _process(delta: float) -> void:
 		var p := _camera.position
 		if p.distance_to(_target_pos) > 0.5:
 			_camera.position = p.lerp(_target_pos, delta * 6.0)
+	_sync_fang_label_zoom()
 	if _panel_opening:
 		if _panel_raw < 1.0:
 			_panel_raw = minf(1.0, _panel_raw + delta / 0.38)

@@ -122,9 +122,10 @@ func _draw() -> void:
 		draw_polygon(pts, colors, uvs, tex)
 	else:
 		_poly(PackedVector2Array([NW, NE, SE, SW]), Color("#cdbb8f"))
-	# 坊名标签：近景（_zoom_idx>=2）显示。直接 draw_string 渲染，
+	# 坊名标签：中景及以上（_zoom_idx>=1）显示。直接 draw_string 渲染，
 	# 不创建 SubViewport —— 在 _draw 里新建/变更 SubViewport 树会偶发卡死/报错。
-	if fang_name != "" and map != null and map._zoom_idx >= 2:
+	# 字号 = 14/zoom（屏幕恒定），须在缩放过程中由 map 逐帧触发重绘校准。
+	if fang_name != "" and map != null and map._zoom_idx >= 1:
 		var zoom: float = map._camera.zoom.x
 		if zoom <= 0.0:
 			zoom = 1.0
