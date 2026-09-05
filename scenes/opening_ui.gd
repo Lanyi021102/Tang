@@ -6,6 +6,7 @@ const INK=Color("#272922")
 const RED=Color("#8f3028")
 const GOLD=Color("#a88a54")
 const MENU=["图鉴","设置","进入长安","坊区档案","营造值","任务"]
+const LEAVE_SCENE="res://scenes/ChangAnCity.tscn"
 const BUTTON_RECTS=[Rect2(1486,72,181,72),Rect2(1684,72,188,72),Rect2(704,866,530,154),Rect2(1510,810,363,66),Rect2(1510,886,168,115),Rect2(1688,886,184,115)]
 var song:Font
 var sans:Font
@@ -30,8 +31,8 @@ func _ready():
 	sans=_font(["Microsoft YaHei","PingFang SC","Noto Sans CJK SC"])
 	bg=load("res://assets/ui/home_full.png")
 	paper=load("res://assets/ui/ink/ui_paper_fiber_tile.png")
-	title_art=load("res://assets/ui/title_changan_works.png")
-	subtitle_art=load("res://assets/ui/subtitle_changan_works.png")
+	title_art=load("res://assets/ui/title_changan_works.png") if ResourceLoader.exists("res://assets/ui/title_changan_works.png") else null
+	subtitle_art=load("res://assets/ui/subtitle_changan_works.png") if ResourceLoader.exists("res://assets/ui/subtitle_changan_works.png") else null
 	for path in ["res://assets/ui/home_codex_button.png","res://assets/ui/home_settings_button.png","res://assets/ui/home_enter_button.png","res://assets/ui/home_archive_button.png","res://assets/ui/home_value_button.png","res://assets/ui/home_task_button.png"]:
 		button_tex.append(load(path))
 	set_process(true)
@@ -46,7 +47,8 @@ func _process(d):
 	elapsed+=d; toast_t=maxf(0,toast_t-d)
 	if leaving:
 		trans=minf(1,trans+d/0.65)
-		if trans>=1: get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
+		if trans>=1:
+			SceneTransition.goto_scene(LEAVE_SCENE)
 	queue_redraw()
 
 func _draw():
