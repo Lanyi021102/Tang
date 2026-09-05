@@ -593,7 +593,8 @@ func _draw_clock_popup() -> void:
 		var active: bool = map.shichen_index(map._time_of_day) == i
 		var key := "shichen_%d" % i
 		_draw_ink_component(_ink_shichen_item_active if active else _ink_shichen_item_normal, sr, 6.0, Color(0.79, 0.64, 0.36, 0.7) if active else Color(0.92, 0.9, 0.84, 0.6), Color(0.79, 0.64, 0.36, 0.35), alpha, key, active)
-		var col := Color("#1f1810") if active else (Color("#fff0aa") if _is_hot(key) else Color("#3a3428"))
+		# 正常项底纹为深墨色 9-slice，字须用亮纸色；悬停亮金高亮，激活为浅金底+深字
+		var col := Color("#1f1810") if active else (Color("#fff0aa") if _is_hot(key) else Color("#f2e8d2"))
 		_text_center(map.font_song, map.shichen_name(i), 14.0, col, sr.get_center())
 
 func _draw_hist_timeline() -> void:
