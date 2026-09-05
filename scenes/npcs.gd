@@ -70,5 +70,15 @@ func _draw_speak_bubble(p: Vector2, zoom: float, spk: Dictionary) -> void:
 
 func _poly(points: PackedVector2Array, color: Color) -> void:
 	var idx := Geometry2D.triangulate_polygon(points)
+	if idx.size() < 3:
+		return
 	for t in range(0, idx.size(), 3):
-		draw_colored_polygon(PackedVector2Array([points[idx[t]], points[idx[t + 1]], points[idx[t + 2]]]), color)
+		var tri := PackedVector2Array([points[idx[t]], points[idx[t + 1]], points[idx[t + 2]]])
+		var a := tri[0]
+		var b := tri[1]
+		var c := tri[2]
+		# 跳过退化/共线三角形（大坐标下 32 位浮点易致 triangulation 失败刷屏）
+		var cross := (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+		if not is_finite(cross) or absf(cross) < 1.0:
+			continue
+		draw_colored_polygon(tri, color)
