@@ -20,6 +20,11 @@ const MOQING := Color("#3a4a44")
 const QING := Color("#7a9b8f")
 const INK := Color("#3a4a44")
 const INK_SOFT := Color("#55665f")
+# —— 青绿（青绿山水）UI 墨调 —— 替代原先近黑底色，与地图青绿/黛青相融洽
+const TEAL_DEEP := Color("#0c3833")    # 深墨青：面板/左栏底
+const TEAL_MID := Color("#15504a")     # 中青绿：标题带/分栏
+const TEAL_SOFT := Color("#2f6f66")    # 浅青绿：hover/描边
+const TEAL_GOLD := Color("#c9a45a")    # 青绿衬金：沿用描金
 const BRK := TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND | TextServer.BREAK_GRAPHEME_BOUND
 const MAX_BUBBLE_W := 350.0
 const BUBBLE_FS := 15.0
@@ -350,16 +355,19 @@ func _draw_screen_ink_vignette() -> void:
 	var left_w: float = 128.0
 	if map != null:
 		left_w = map.LEFT_BAR_EXPANDED_W if not map._left_bar_collapsed else map.LEFT_BAR_COLLAPSED_W
-	_draw_texture_layer(_ink_dark, Rect2(vp.position.x, vp.position.y, left_w, vp.size.y), true, 0.88)
+	# 青绿墨底（原近黑墨）：先铺一层青绿，再叠轻墨纹理，形成青绿山水底
+	_round_rect_fill(Rect2(vp.position.x, vp.position.y, left_w, vp.size.y), 0.0, _ca(TEAL_DEEP, 0.92))
+	_draw_texture_layer(_ink_dark, Rect2(vp.position.x, vp.position.y, left_w, vp.size.y), true, 0.5)
 	if map == null or not map._timeline_collapsed:
-		_draw_texture_layer(_ink_dark, Rect2(vp.position.x, vp.end.y - 118.0, vp.size.x, 118.0), true, 0.36)
+		_round_rect_fill(Rect2(vp.position.x, vp.end.y - 118.0, vp.size.x, 118.0), 0.0, _ca(TEAL_DEEP, 0.72))
+		_draw_texture_layer(_ink_dark, Rect2(vp.position.x, vp.end.y - 118.0, vp.size.x, 118.0), true, 0.22)
 	_draw_texture_layer(_ink_edge, Rect2(vp.position.x - 10.0, vp.position.y - 8.0, vp.size.x + 20.0, vp.size.y + 16.0), false, 0.26)
 	# 左侧边缘装饰宽度跟随收起状态（收起时只保留窄条边缘）
-	_draw_texture_layer(_ink_edge, Rect2(-20.0, -6.0, left_w + 32.0, vp.size.y + 12.0), false, 0.55)
+	_draw_texture_layer(_ink_edge, Rect2(-20.0, -6.0, left_w + 32.0, vp.size.y + 12.0), false, 0.4)
 	# 左上角墨雾装饰仅展开时显示（收起时窄条放不下）
 	if map == null or not map._left_bar_collapsed:
-		_draw_texture_layer(_ink_hover_mist, Rect2(104.0, 48.0, 260.0, 124.0), false, 0.12)
-	_draw_texture_layer(_ink_hover_mist, Rect2(vp.end.x - 472.0, 96.0, 452.0, 118.0), false, 0.16)
+		_draw_texture_layer(_ink_hover_mist, Rect2(104.0, 48.0, 260.0, 124.0), false, 0.1)
+	_draw_texture_layer(_ink_hover_mist, Rect2(vp.end.x - 472.0, 96.0, 452.0, 118.0), false, 0.14)
 
 func _draw_top_function_band() -> void:
 	if map == null:
@@ -479,7 +487,7 @@ func _draw_group_chat() -> void:
 			if ky > kr.end.y - 6:
 				break
 	var input := Rect2(r.position.x + 18.0, r.end.y - 42.0, r.size.x - 76.0, 30.0)
-	_draw_ink_component(_ink_chat_bubble_dark, input, 15.0, Color(0.04, 0.06, 0.06, 0.72), Color("#9b763b", 0.45), 0.86)
+	_draw_ink_component(_ink_chat_bubble_dark, input, 15.0, Color(0.02, 0.16, 0.15, 0.72), Color("#2f6f66", 0.5), 0.86)
 	_text_left(map.font_hei, "说点什么...", 12.0, Color("#bfb59a", 0.68), Vector2(input.position.x + 14.0, input.position.y + 20.0))
 	var send_rect := Rect2(r.end.x - 50.0, r.end.y - 49.0, 38.0, 38.0)
 	draw_arc(send_rect.get_center(), 17.0, 0.0, TAU, 30, Color("#b88a40", 0.78), 1.5)
@@ -741,12 +749,13 @@ func _draw_texture_layer(tex: Texture2D, rect: Rect2, tile: bool, alpha: float) 
 func _draw_ink_panel(rect: Rect2, dark: bool, radius: float, alpha := 1.0) -> void:
 	var shadow := Rect2(rect.position + Vector2(2.0, 4.0), rect.size)
 	_round_rect_fill(shadow, radius, Color(0, 0, 0, 0.28 * alpha))
-	var base := Color(0.03, 0.04, 0.04, 0.78 * alpha) if dark else Color(0.91, 0.86, 0.74, 0.80 * alpha)
-	var border := Color(0.73, 0.56, 0.28, 0.64 * alpha) if dark else Color(0.48, 0.38, 0.22, 0.48 * alpha)
+	# 深色面板：近黑 → 青绿墨（与地图/知识卡深绿一致）
+	var base := Color(0.02, 0.15, 0.14, 0.80 * alpha) if dark else Color(0.91, 0.86, 0.74, 0.80 * alpha)
+	var border := Color(0.60, 0.78, 0.72, 0.55 * alpha) if dark else Color(0.48, 0.38, 0.22, 0.48 * alpha)
 	_round_rect_fill(rect.grow(-2.0), radius, base)
 	var inner := rect.grow(-8.0)
-	_draw_texture_layer(_ink_dark if dark else _ink_paper, inner, true, 0.68 * alpha)
-	_draw_texture_layer(_ink_noise, inner, true, 0.18 * alpha)
+	_draw_texture_layer(_ink_dark if dark else _ink_paper, inner, true, 0.5 * alpha)
+	_draw_texture_layer(_ink_noise, inner, true, 0.14 * alpha)
 	_draw_texture_layer(_ink_edge, rect.grow(3.0), false, 0.82 * alpha)
 	_draw_texture_layer(_ink_frame, rect, false, 0.66 * alpha)
 	_round_rect_stroke(rect, radius, border, 1.1)
@@ -759,9 +768,9 @@ func _draw_ink_header(rect: Rect2, dark: bool, radius: float, alpha := 1.0) -> v
 		draw_texture_rect(title_tex, rect, false, Color(1, 1, 1, 0.88 * alpha))
 		_draw_texture_layer(_ink_separator, Rect2(rect.position + Vector2(18.0, rect.size.y - 7.0), Vector2(rect.size.x - 36.0, 18.0)), false, 0.72 * alpha)
 		return
-	var base := Color(0.08, 0.12, 0.12, 0.76 * alpha) if dark else Color(0.82, 0.76, 0.62, 0.72 * alpha)
+	var base := Color(0.03, 0.19, 0.17, 0.80 * alpha) if dark else Color(0.82, 0.76, 0.62, 0.72 * alpha)
 	_round_rect_fill(rect, radius, base)
-	_draw_texture_layer(_ink_dark if dark else _ink_paper, rect, true, 0.36 * alpha)
+	_draw_texture_layer(_ink_dark if dark else _ink_paper, rect, true, 0.28 * alpha)
 	_draw_texture_layer(_ink_separator, Rect2(rect.position + Vector2(18.0, rect.size.y - 7.0), Vector2(rect.size.x - 36.0, 18.0)), false, 0.72 * alpha)
 
 func _draw_hover_accent(rect: Rect2, radius: float, key: String, alpha := 1.0) -> void:

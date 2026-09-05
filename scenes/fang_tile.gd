@@ -23,13 +23,8 @@ var uv_scale_ns := 1.0
 var uv_rotation_degrees := 0.0
 # =============================================
 
-var _name_vp: SubViewport
-var _name_tex: ViewportTexture
-var _name_tex_size := 0.0
-
 const SIDE := Color("#8a7348")
 const INK := Color("#3a362e")
-
 # 每张贴图的内容菱形 UV 缓存（同一贴图只算一次）
 static var _uv_cache: Dictionary = {}
 
@@ -108,7 +103,8 @@ func _draw() -> void:
 	var fang_scale := 1.0
 	if map != null:
 		var zoom: float = map._camera.zoom.x
-		if zoom < 0.01:
+		# 仅在极远（低于远景下限，正常不可达）时放大保持可见；远景 0.0095 以上保持自然缩放
+		if zoom < 0.007:
 			fang_scale = 0.1 / maxf(zoom, 0.0001)
 	var hw := fang_w * 0.5 * fang_scale * 9.9   # 东西宽度方向 ×2 补偿等距压缩
 	var hh := fang_h * 0.5 * fang_scale * 9.9   # 南北深度方向保持不变
@@ -126,7 +122,8 @@ func _draw() -> void:
 		draw_polygon(pts, colors, uvs, tex)
 	else:
 		_poly(PackedVector2Array([NW, NE, SE, SW]), Color("#cdbb8f"))
-	# 坊名标签
+	# 坊名标签：近景（_zoom_idx>=2）显示。直接 draw_string 渲染，
+	# 不创建 SubViewport —— 在 _draw 里新建/变更 SubViewport 树会偶发卡死/报错。
 	if fang_name != "" and map != null and map._zoom_idx >= 2:
 		var zoom: float = map._camera.zoom.x
 		if zoom <= 0.0:
@@ -145,45 +142,12 @@ func _draw() -> void:
 		var rect := Rect2(-cw * 0.5, -ch * 0.5, cw, ch)
 		draw_rect(rect, Color(0.12, 0.10, 0.08, 0.85))
 		draw_rect(rect, Color(0.75, 0.68, 0.55, 0.6), false, maxf(1.0 / zoom, 1.0))
-		# 用缓存的 Viewport 贴图绘制文字（清晰）
-		_ensure_name_tex(fs, font, chars, char_w, line_h, px, py, cw, ch)
-		if _name_tex != null:
-			draw_texture(_name_tex, Vector2(-cw * 0.5, -ch * 0.5))
-		else:
-			# 首帧贴图未就绪，直接用 draw_string 兜底
-			var text_color := Color(0.95, 0.92, 0.85)
-			for i in range(chars.size()):
-				var c: String = chars[i]
-				var cx_w: float = font.get_string_size(c, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-				var cy := -ch * 0.5 + py + line_h * i + fs * 0.8
-				draw_string(font, Vector2(-cx_w * 0.5, cy), c, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, text_color)
-
-func _ensure_name_tex(fs: float, font: Font, chars: Array, char_w: float, line_h: float, px: float, py: float, cw: float, ch: float) -> void:
-	if _name_tex != null and absf(_name_tex_size - fs) < 1.0:
-		return
-	_name_tex_size = fs
-	if _name_vp != null:
-		_name_vp.queue_free()
-	_name_vp = SubViewport.new()
-	_name_vp.size = Vector2i(ceili(cw), ceili(ch))
-	_name_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	_name_vp.transparent_bg = true
-	var lbl := Label.new()
-	lbl.text = ""
-	for c in chars:
-		lbl.text += c + "\n"
-	lbl.text = lbl.text.strip_edges()
-	lbl.autowrap_mode = TextServer.AUTOWRAP_OFF
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_override("font", font)
-	lbl.add_theme_font_size_override("font_size", ceili(fs))
-	lbl.add_theme_color_override("font_color", Color(0.95, 0.92, 0.85))
-	lbl.position = Vector2.ZERO
-	lbl.size = Vector2(ceili(cw), ceili(ch))
-	_name_vp.add_child(lbl)
-	add_child(_name_vp)
-	_name_tex = _name_vp.get_texture()
+		var text_color := Color(0.95, 0.92, 0.85)
+		for i in range(chars.size()):
+			var c: String = chars[i]
+			var cx_w: float = font.get_string_size(c, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+			var cy := -ch * 0.5 + py + line_h * i + fs * 0.8
+			draw_string(font, Vector2(-cx_w * 0.5, cy), c, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, text_color)
 
 func set_map_ref(m) -> void:
 	map = m

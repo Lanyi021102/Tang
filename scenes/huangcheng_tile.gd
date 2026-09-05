@@ -5,10 +5,6 @@ var fang_w := 1.0      # 东西宽度（步 × STEP）
 var fang_h := 1.0      # 南北深度（步 × STEP）
 var map
 
-var _name_vp: SubViewport
-var _name_tex: ViewportTexture
-var _name_tex_size := 0.0
-
 const SIDE := Color("#a0522d")
 const INK := Color("#3a362e")
 
@@ -21,7 +17,8 @@ func _draw() -> void:
 	if map != null:
 		var zoom: float = map._camera.zoom.x
 		zoom_idx = map._zoom_idx
-		if zoom < 0.01:
+		# 仅极远（低于远景下限，正常不可达）补偿；远景 0.0095 以上保持自然缩放
+		if zoom < 0.007:
 			fang_scale = 0.1 / maxf(zoom, 0.0001)
 	var hw := fang_w * 0.5 * fang_scale * 2.0
 	var hh := fang_h * 0.5 * fang_scale * 1.0
@@ -56,43 +53,12 @@ func _draw() -> void:
 		var rect := Rect2(-cw * 0.5, -ch * 0.5, cw, ch)
 		draw_rect(rect, Color(0.12, 0.10, 0.08, 0.85))
 		draw_rect(rect, Color(0.85, 0.72, 0.50, 0.6), false, maxf(1.5 / zoom, 1.5))
-		_ensure_name_tex(fs, font, chars, char_w, line_h, px, py, cw, ch)
-		if _name_tex != null:
-			draw_texture(_name_tex, Vector2(-cw * 0.5, -ch * 0.5))
-		else:
-			var text_color := Color(0.95, 0.92, 0.85)
-			for i in range(chars.size()):
-				var c: String = chars[i]
-				var cx_w: float = font.get_string_size(c, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-				var cy := -ch * 0.5 + py + line_h * i + fs * 0.8
-				draw_string(font, Vector2(-cx_w * 0.5, cy), c, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, text_color)
-
-func _ensure_name_tex(fs: float, font: Font, chars: Array, char_w: float, line_h: float, px: float, py: float, cw: float, ch: float) -> void:
-	if _name_tex != null and absf(_name_tex_size - fs) < 1.0:
-		return
-	_name_tex_size = fs
-	if _name_vp != null:
-		_name_vp.queue_free()
-	_name_vp = SubViewport.new()
-	_name_vp.size = Vector2i(ceili(cw), ceili(ch))
-	_name_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	_name_vp.transparent_bg = true
-	var lbl := Label.new()
-	lbl.text = ""
-	for c in chars:
-		lbl.text += c + "\n"
-	lbl.text = lbl.text.strip_edges()
-	lbl.autowrap_mode = TextServer.AUTOWRAP_OFF
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_override("font", font)
-	lbl.add_theme_font_size_override("font_size", ceili(fs))
-	lbl.add_theme_color_override("font_color", Color(0.95, 0.92, 0.85))
-	lbl.position = Vector2.ZERO
-	lbl.size = Vector2(ceili(cw), ceili(ch))
-	_name_vp.add_child(lbl)
-	add_child(_name_vp)
-	_name_tex = _name_vp.get_texture()
+		var text_color := Color(0.95, 0.92, 0.85)
+		for i in range(chars.size()):
+			var c: String = chars[i]
+			var cx_w: float = font.get_string_size(c, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+			var cy := -ch * 0.5 + py + line_h * i + fs * 0.8
+			draw_string(font, Vector2(-cx_w * 0.5, cy), c, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, text_color)
 
 func set_map_ref(m) -> void:
 	map = m

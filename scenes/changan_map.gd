@@ -196,16 +196,18 @@ var _outline_layer
 
 # camera zoom state
 # 三档离散（近/中/远按钮吸附用）
-const ZOOM_LEVELS := [0.008, 0.04, 0.3]
+const ZOOM_LEVELS := [0.0095, 0.04, 0.3]
 # 各档滚轮可连续缩放的范围（远/中/近），边界相接，滚轮不可跨档
+# 远档下限 = 远景快照值 0.0095：整城约占视口 60%，到该视角后不可继续缩小
+# （再小会触发 fang_tile 的 <0.01 zoom 补偿绘制，产生重叠怪图）。
 const ZOOM_RANGES := [
-	[0.0015, 0.02],
+	[0.0095, 0.02],
 	[0.02, 0.12],
 	[0.12, 0.6],
 ]
 const ZOOM_WHEEL_STEP := 1.3   # 每格滚轮缩放倍率（细腻）
-var _zoom_idx := 1
-var _target_zoom := 0.04
+var _zoom_idx := 0
+var _target_zoom := 0.0095
 var _target_pos := Vector2.ZERO
 var _free_pan := false
 
@@ -335,8 +337,23 @@ func _ready() -> void:
 	_init_npcs()
 	_sync_hud_guards()
 	NetworkManager.chat_response.connect(_on_chat_response)
-	_set_zoom(3, true)
+	_snap_far_entry()
 	_redraw_world()
+
+# 进入 ChangAnCity 即为远景（整城约 60%）快照：把相机直接放到远景档，
+# 而非历史遗留的 _set_zoom(3)（会被 clamp 到近景）。
+func _snap_far_entry() -> void:
+	_zoom_idx = 0
+	_target_zoom = ZOOM_LEVELS[0]
+	_target_pos = _cam_pos_for(0)
+	_camera.zoom = Vector2(_target_zoom, _target_zoom)
+	_camera.position = _target_pos
+	_cam_anim = false
+	_follow_group = -1
+	_free_pan = false
+	GameManager.set_view_mode("far")
+	if _ui:
+		_ui.queue_redraw()
 
 func _setup_fonts() -> void:
 	var kf := SystemFont.new()
@@ -785,11 +802,12 @@ func _set_zoom(idx: int, snap: bool = false) -> void:
 			child.queue_redraw()
 
 func _cam_pos_for(idx: int) -> Vector2:
-	# 城市中心：东西 4831.5 步，南北 4334 步
+	# 城市中心：东西 4831.5 步，南北 4334 步（world.gd 地面菱形几何中心）
 	var center := _step_iso(4831.5, 4334.0)
 	match idx:
 		0:
-			return _iso(6.0, 6.5) + Vector2(0, 40)
+			# 远景整城：以地面菱形几何中心取景
+			return center
 		2:
 			return _near_fang_center()
 		_:
