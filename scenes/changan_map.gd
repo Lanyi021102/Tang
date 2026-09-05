@@ -1,11 +1,26 @@
-﻿extends Node2D
+extends Node2D
 
 # 唐长安城 2.5D 45°等距鸟瞰场景
 # Tang Chang'an — 45° isometric bird's-eye view, 3 zoom levels via mouse wheel.
 
-const MENU_SCENE := "res://scenes/MainMenu.tscn"
+const MENU_SCENE := "res://scenes/Start.tscn"
 const UI_SCRIPT := preload("res://scenes/ui_overlay.gd")
 const FANG_DIR := "res://assets/fang/"
+
+# UI 逻辑画布基准：所有 UI 常量按 1280x720 设计，由 Overlay/HUD 容器等比放大铺满实际视口（1920x1080 → ×1.5）
+const UI_DESIGN_W := 1280.0
+const UI_DESIGN_H := 720.0
+
+func ui_scale() -> float:
+	return minf(get_viewport_rect().size.x / UI_DESIGN_W, get_viewport_rect().size.y / UI_DESIGN_H)
+
+func ui_visual_offset() -> Vector2:
+	var s := ui_scale()
+	return (get_viewport_rect().size - Vector2(UI_DESIGN_W * s, UI_DESIGN_H * s)) * 0.5
+
+# 视口/屏幕坐标 → 1280x720 设计坐标（供手写命中判定与绘制换算）
+func screen_to_ui(p: Vector2) -> Vector2:
+	return (p - ui_visual_offset()) / ui_scale()
 
 const CLOCK_RECT := Rect2(1156.0, 16.0, 84.0, 84.0)
 const GROUP_CHAT_RECT := Rect2(940.0, 120.0, 300.0, 380.0)
@@ -180,9 +195,17 @@ var _markers_node
 var _outline_layer
 
 # camera zoom state
+# 三档离散（近/中/远按钮吸附用）
 const ZOOM_LEVELS := [0.008, 0.04, 0.3]
+# 各档滚轮可连续缩放的范围（远/中/近），边界相接，滚轮不可跨档
+const ZOOM_RANGES := [
+	[0.0015, 0.02],
+	[0.02, 0.12],
+	[0.12, 0.6],
+]
+const ZOOM_WHEEL_STEP := 1.3   # 每格滚轮缩放倍率（细腻）
 var _zoom_idx := 1
-var _target_zoom := 1.2
+var _target_zoom := 0.04
 var _target_pos := Vector2.ZERO
 var _free_pan := false
 
@@ -717,6 +740,25 @@ func _redraw_world() -> void:
 func _build_ui() -> void:
 	_ui = get_node("UI/Overlay")
 	_ui.map = self
+	_apply_ui_canvas_layout.call_deferred()
+	get_viewport().size_changed.connect(_apply_ui_canvas_layout)
+
+# 把 Overlay/HUD 固定在 1280x720 逻辑画布并等比放大铺满实际视口（保留 1920 视口）。
+# 这样全部 UI 常量（1280 系设计）绘制、HUD 真实按钮、clip 容器都自动放大，命中由 Godot 换算。
+func _apply_ui_canvas_layout() -> void:
+	var s := ui_scale()
+	var off := (get_viewport_rect().size - Vector2(UI_DESIGN_W, UI_DESIGN_H) * s) * 0.5
+	for path in ["UI/Overlay", "UI/HUD"]:
+		var c := get_node_or_null(path) as Control
+		if c == null:
+			continue
+		c.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+		c.offset_left = off.x
+		c.offset_top = off.y
+		c.offset_right = off.x + UI_DESIGN_W
+		c.offset_bottom = off.y + UI_DESIGN_H
+		c.pivot_offset = Vector2.ZERO
+		c.scale = Vector2(s, s)
 
 # ==================== zoom ====================
 func _set_zoom(idx: int, snap: bool = false) -> void:
@@ -756,6 +798,25 @@ func _cam_pos_for(idx: int) -> Vector2:
 func _near_fang_center() -> Vector2:
 	# 默认放大到城南区域（坊密集区）
 	return _step_iso(4831.5, 6000.0)
+
+# 滚轮缩放：仅在当前档（_zoom_idx）允许的范围内连续细腻缩放，不跨越档位。
+# 跨档需点击「近景 / 中景 / 远景」按钮（_set_zoom）。
+func _wheel_zoom(dir: int) -> void:
+	if _zoom_idx < 0 or _zoom_idx >= ZOOM_RANGES.size():
+		return
+	var range_min: float = ZOOM_RANGES[_zoom_idx][0]
+	var range_max: float = ZOOM_RANGES[_zoom_idx][1]
+	var factor := ZOOM_WHEEL_STEP if dir > 0 else 1.0 / ZOOM_WHEEL_STEP
+	_target_zoom = clampf(_target_zoom * factor, range_min, range_max)
+	_cam_anim = false
+	_free_pan = false
+	if _ui:
+		_ui.queue_redraw()
+	# 缩放变化时触发坊和皇城重绘（更新名字显示）
+	var fangs_node = get_node_or_null("World/Fangs")
+	if fangs_node:
+		for child in fangs_node.get_children():
+			child.queue_redraw()
 
 func _ease_out_cubic(t: float) -> float:
 	var u := 1.0 - t
@@ -1009,10 +1070,10 @@ func timeline_event_at_x(x: float) -> int:
 	return best
 
 func codex_panel_rect() -> Rect2:
-	var vp := get_viewport_rect()
+	# 居中于 1280x720 UI 逻辑画布（Overlay 被 scale 放大到视口）
 	var w := 720.0
 	var h := 600.0
-	return Rect2((vp.size.x - w) * 0.5, 60.0, w, h)
+	return Rect2((UI_DESIGN_W - w) * 0.5, 60.0, w, h)
 
 func codex_cat_rect(i: int) -> Rect2:
 	var pr := codex_panel_rect()
@@ -1094,17 +1155,26 @@ func codex_collected_list(cat: int) -> Array:
 		return []
 	return _codex_collected.get(CODEX_CATS[cat], [])
 
+# 参数为 1280x720 设计系坐标：左侧拦截带（左栏）与底部时间轴带
 func _is_screen_ui_band(p: Vector2) -> bool:
-	var vp := get_viewport_rect()
 	var w := LEFT_BAR_EXPANDED_W if not _left_bar_collapsed else LEFT_BAR_COLLAPSED_W
 	if p.x <= w:
 		return true
-	if not _timeline_collapsed and p.y >= vp.size.y - 118.0:
+	if not _timeline_collapsed and p.y >= UI_DESIGN_H - 118.0:
 		return true
 	return false
 
 func _is_blocked_screen_ui_band(p: Vector2) -> bool:
 	return _is_screen_ui_band(p) and not HIST_TIMELINE_RECT.has_point(p)
+
+# 点击点（1280x720 设计系）是否落在已展开知识卡片（面板本体或关闭 ✕）上。
+# 用于让面板命中优先于与其重叠的右上角时间指示区（TIME_AREA_RECT）。
+func _ui_panel_at(p: Vector2) -> bool:
+	if _selected.is_empty():
+		return false
+	if building_close_rect().has_point(p):
+		return true
+	return BUILDING_PANEL_RECT.has_point(p)
 
 # 知识卡片展开时，其面板区域应拦截对背景地图的点击（但面板内的关闭/追问按钮仍可点）
 func _is_panel_blocking(p: Vector2) -> bool:
@@ -1299,12 +1369,14 @@ func _update_hover() -> void:
 		_ui.queue_redraw()
 
 # 鼠标是否悬停在任何 UI（按钮/面板/时间轴/底部栏）之上：此时不触发地图坊 hover
+# 参数为视口坐标，内部换算到 1280x720 设计系后与 UI rect 比较
 func _is_pointer_on_ui(p: Vector2) -> bool:
-	if _is_blocked_screen_ui_band(p):
+	var up := screen_to_ui(p)
+	if _is_blocked_screen_ui_band(up):
 		return true
-	if TIME_AREA_RECT.has_point(p):
+	if TIME_AREA_RECT.has_point(up):
 		return true
-	if HIST_TIMELINE_RECT.has_point(p) and not _timeline_collapsed:
+	if HIST_TIMELINE_RECT.has_point(up) and not _timeline_collapsed:
 		return true
 	if _ui != null and _ui._detect_ui_hover() != "":
 		return true
@@ -1343,51 +1415,54 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
 			var wmb := event as InputEventMouseButton
-			if _codex_open and codex_panel_rect().has_point(wmb.position):
+			var up := screen_to_ui(wmb.position)
+			if _codex_open and codex_panel_rect().has_point(up):
 				_codex_focus = clampi(_codex_focus - 1, 0, maxi(0, codex_card_count() - 1))
 				_ui.queue_redraw()
-			elif _hist_open and hist_popup_rect().has_point(wmb.position):
+			elif _hist_open and hist_popup_rect().has_point(up):
 				_hist_scroll = maxf(0.0, _hist_scroll - 40.0)
 				_ui.queue_redraw()
-			elif _panel_has_point(wmb.position):
+			elif _panel_has_point(up):
 				_chat_scroll = maxf(0.0, _chat_scroll - 40.0)
 				_ui.queue_redraw()
-			elif _is_screen_ui_band(wmb.position):
+			elif _is_screen_ui_band(up):
 				return
 			else:
-				_set_zoom(_zoom_idx + 1)
+				_wheel_zoom(1)
 			return
 		if event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
 			var wmb2 := event as InputEventMouseButton
-			if _codex_open and codex_panel_rect().has_point(wmb2.position):
+			var up2 := screen_to_ui(wmb2.position)
+			if _codex_open and codex_panel_rect().has_point(up2):
 				_codex_focus = clampi(_codex_focus + 1, 0, maxi(0, codex_card_count() - 1))
 				_ui.queue_redraw()
-			elif _hist_open and hist_popup_rect().has_point(wmb2.position):
+			elif _hist_open and hist_popup_rect().has_point(up2):
 				_hist_scroll = minf(_hist_scroll + 40.0, hist_max_scroll())
 				_ui.queue_redraw()
-			elif _panel_has_point(wmb2.position):
+			elif _panel_has_point(up2):
 				_chat_scroll += 40.0
 				_ui.queue_redraw()
-			elif _is_screen_ui_band(wmb2.position):
+			elif _is_screen_ui_band(up2):
 				return
 			else:
-				_set_zoom(_zoom_idx - 1)
+				_wheel_zoom(-1)
 			return
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			var mb := event as InputEventMouseButton
+			var mp := screen_to_ui(mb.position)
 			if mb.pressed:
-				if left_toggle_rect().has_point(mb.position):
+				if left_toggle_rect().has_point(mp):
 					toggle_left_bar()
 					return
-				if _codex_open and codex_card_area().has_point(mb.position) and codex_card_count() > 0:
+				if _codex_open and codex_card_area().has_point(mp) and codex_card_count() > 0:
 					# 图鉴知识卡片拖拽滑动
 					_codex_dragging = true
 					_codex_drag_focus = _codex_focus_anim
-					_codex_drag_x = mb.position.x
+					_codex_drag_x = mp.x
 					_dragging = false
 					_moved = false
 					return
-				if _is_screen_ui_band(mb.position) or _is_panel_blocking(mb.position):
+				if _is_screen_ui_band(mp) or _is_panel_blocking(mp):
 					_dragging = false
 					_moved = false
 					_drag_start = mb.position
@@ -1410,7 +1485,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			var mmd := event as InputEventMouseMotion
 			var stride: float = codex_card_stride()
 			if stride > 0.0:
-				_codex_drag_focus -= mmd.relative.x / stride
+				# mmd.relative 为视口像素；卡片 stride 为设计系，需换算保持拖拽手感
+				_codex_drag_focus -= mmd.relative.x / ui_scale() / stride
 			_ui.queue_redraw()
 			return
 		if _dragging:
@@ -1429,15 +1505,17 @@ func _panel_has_point(p: Vector2) -> bool:
 	return BUILDING_PANEL_RECT.has_point(p)
 
 func _handle_click(screen_pos: Vector2) -> void:
-	if left_toggle_rect().has_point(screen_pos):
+	# screen_pos 为视口坐标；UI 判定统一换算到 1280x720 设计系，世界点击保留视口坐标
+	var ui_pos := screen_to_ui(screen_pos)
+	if left_toggle_rect().has_point(ui_pos):
 		toggle_left_bar()
 		return
 	if _clock_open:
 		# 时辰选择弹窗打开时：点时辰项切换时间，点弹窗外关闭
 		var was_open := _clock_open
-		if clock_popup_rect().has_point(screen_pos):
+		if clock_popup_rect().has_point(ui_pos):
 			for i in range(SHICHEN.size()):
-				if shichen_rect(i).has_point(screen_pos):
+				if shichen_rect(i).has_point(ui_pos):
 					set_time(float(i * 2), true)
 					_clock_open = false
 					_clock_popup_anim_target = 0.0
@@ -1448,8 +1526,10 @@ func _handle_click(screen_pos: Vector2) -> void:
 		_clock_popup_anim_target = 0.0
 		_ui.queue_redraw()
 		return
-	if TIME_AREA_RECT.has_point(screen_pos):
-		# 点击时间指示区域：弹出时辰选择卡片
+	# 右上角时间指示区域命中：弹出时辰选择卡片。
+	# 知识卡片展开时其右上角关闭 ✕（及面板本体）与该区域重叠，
+	# 必须先让面板命中判定接管，否则 ✕ 永远点不到、卡片关不掉。
+	if TIME_AREA_RECT.has_point(ui_pos) and not _ui_panel_at(ui_pos):
 		_clock_open = true
 		_clock_popup_anim = 0.0
 		_clock_popup_anim_target = 1.0
@@ -1459,29 +1539,29 @@ func _handle_click(screen_pos: Vector2) -> void:
 	if _hist_open:
 		_hist_open = false
 		_ui.queue_redraw()
-		if hist_popup_rect().has_point(screen_pos):
+		if hist_popup_rect().has_point(ui_pos):
 			for i in range(_timeline.size()):
-				if hist_event_rect(i).has_point(screen_pos):
+				if hist_event_rect(i).has_point(ui_pos):
 					_jump_to_year(int(_timeline[i]["year"]))
 					return
 		return
 	if _codex_open:
-		if codex_panel_rect().has_point(screen_pos):
+		if codex_panel_rect().has_point(ui_pos):
 			# 关闭按钮
 			var pr: Rect2 = codex_panel_rect()
 			var close_r := Rect2(pr.end.x - 44.0, pr.position.y + 12.0, 28.0, 28.0)
-			if close_r.has_point(screen_pos):
+			if close_r.has_point(ui_pos):
 				_codex_open = false
 				_ui.queue_redraw()
 				return
 			for i in range(3):
-				if codex_cat_rect(i).has_point(screen_pos):
+				if codex_cat_rect(i).has_point(ui_pos):
 					_codex_cat = i
 					_codex_focus = 0
 					_codex_scroll = 0.0
 					_ui.queue_redraw()
 					return
-			var ci := codex_card_at(screen_pos)
+			var ci := codex_card_at(ui_pos)
 			if ci >= 0:
 				_codex_focus = ci
 				_ui.queue_redraw()
@@ -1490,12 +1570,12 @@ func _handle_click(screen_pos: Vector2) -> void:
 		_codex_open = false
 		_ui.queue_redraw()
 		return
-	if HIST_TIMELINE_RECT.has_point(screen_pos):
+	if HIST_TIMELINE_RECT.has_point(ui_pos):
 		if _timeline_collapsed:
 			return
 		# 点击时间轴：先打开大事记卡片，再按事件点滚动定位并跳转年份
 		_hist_open = true
-		var ev_idx := timeline_event_at_x(screen_pos.x)
+		var ev_idx := timeline_event_at_x(ui_pos.x)
 		if ev_idx >= 0:
 			# 点击具体大事记点：滚动定位 + 年份动画跳转（时钟/日月实时流转 + 大圆滑动）
 			_hist_scroll = maxf(0.0, float(ev_idx) * 44.0 - 6.0)
@@ -1504,19 +1584,19 @@ func _handle_click(screen_pos: Vector2) -> void:
 		_hist_scroll = 0.0
 		_ui.queue_redraw()
 		return
-	if _is_blocked_screen_ui_band(screen_pos):
+	if _is_blocked_screen_ui_band(ui_pos):
 		return
-	if _group_chat_open and group_chat_close_rect().has_point(screen_pos):
+	if _group_chat_open and group_chat_close_rect().has_point(ui_pos):
 		_group_chat_open = false
 		_ui.queue_redraw()
 		return
-	if _group_chat_open and GROUP_CHAT_RECT.has_point(screen_pos):
+	if _group_chat_open and GROUP_CHAT_RECT.has_point(ui_pos):
 		return
 	if not _selected.is_empty():
-		if building_close_rect().has_point(screen_pos):
+		if building_close_rect().has_point(ui_pos):
 			_deselect()
 			return
-		if BUILDING_PANEL_RECT.has_point(screen_pos):
+		if BUILDING_PANEL_RECT.has_point(ui_pos):
 			_knowledge_card_back = not _knowledge_card_back
 			_ui.queue_redraw()
 			return

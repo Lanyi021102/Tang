@@ -175,7 +175,8 @@ func _hover_alpha_of(key: String) -> float:
 func _detect_ui_hover() -> String:
 	if map == null:
 		return ""
-	var p := get_viewport().get_mouse_position()
+	# 视口坐标 → 1280x720 UI 设计坐标（Overlay 被整体 scale，命中需同系比较）
+	var p: Vector2 = map.screen_to_ui(get_viewport().get_mouse_position())
 	# 左侧栏收起/展开切换按钮
 	if map.left_toggle_rect().has_point(p):
 		return "left_toggle"
@@ -344,7 +345,8 @@ func _draw() -> void:
 		_draw_codex_panel()
 
 func _draw_screen_ink_vignette() -> void:
-	var vp := get_viewport_rect()
+	# Overlay 逻辑画布 1280x720，被 map 整体 scale 放大铺满视口；这里以逻辑画布为全屏
+	var vp := Rect2(Vector2.ZERO, Vector2(map.UI_DESIGN_W, map.UI_DESIGN_H)) if map != null else Rect2(Vector2.ZERO, size)
 	var left_w: float = 128.0
 	if map != null:
 		left_w = map.LEFT_BAR_EXPANDED_W if not map._left_bar_collapsed else map.LEFT_BAR_COLLAPSED_W
