@@ -1,4 +1,4 @@
-﻿extends Node2D
+extends Node2D
 # 单个坊（等距矩形 + 坊名标签）— 基于步坐标尺寸
 
 var fang_w := 1.0      # 坊东西宽度（步 × STEP）
@@ -184,9 +184,6 @@ func _ensure_name_tex(fs: float, font: Font, chars: Array, char_w: float, line_h
 	_name_vp.add_child(lbl)
 	add_child(_name_vp)
 	_name_tex = _name_vp.get_texture()
-
-func set_map_ref(m) -> void:
-	map = m
 
 func set_map_ref(m) -> void:
 	map = m
