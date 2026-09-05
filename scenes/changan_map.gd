@@ -1281,8 +1281,9 @@ func _update_tilt_shift(delta: float) -> void:
 		target_band = 0.3
 		target_blur = 0.32
 	elif _zoom_idx >= ZOOM_LEVELS.size() - 1:
-		target_band = 0.2
-		target_blur = 0.6
+		# 近景：周围模糊弱化（band 加宽清晰区、blur 降低强度）
+		target_band = 0.34
+		target_blur = 0.32
 	_ts_focus_y = lerpf(_ts_focus_y, target_y, delta * 4.0)
 	_ts_band = lerpf(_ts_band, target_band, delta * 4.0)
 	_ts_blur = lerpf(_ts_blur, target_blur, delta * 4.0)
