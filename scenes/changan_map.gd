@@ -205,6 +205,12 @@ var _codex_drag_x := 0.0
 var _codex_drag_focus := 0.0
 var _codex_scroll := 0.0
 
+# ---- far-view knowledge cards ----
+var _far_cards: Array = []
+var _far_mini_maps: Dictionary = {}
+var _far_card: Dictionary = {}
+var _far_card_open := false
+
 var _ui
 var _world
 var _npcs_node
@@ -431,6 +437,7 @@ func _sync_from_data() -> void:
 	_year_display = float(_current_year)
 
 func _build_fangs() -> void:
+	var FangScript = preload("res://scenes/fang_tile.gd")
 	# 贴图加载：按坊名匹配正式图，找不到再按分级回落（贵族/平民）
 	_square_tex.clear()
 	_rect_tex.clear()
@@ -446,6 +453,45 @@ func _build_fangs() -> void:
 		if ResourceLoader.exists(p):
 			_fang_tex_map[n] = load(p)
 	print("=== 坊贴图加载完毕：%d 张 ===" % _fang_tex_map.size())
+
+	# ---- 皇宫整体贴图加载 ----
+	var palace_path := "res://assets/fang/皇宫01.png"
+	if ResourceLoader.exists(palace_path):
+		var palace_tex: Texture2D = load(palace_path)
+		# 皇宫区域：ci=3-6, si=0-3（宫城+皇城共12坊大小）
+		# 西边缘=ci=3坊西边缘，东边缘=ci=7坊东边缘
+		# 北边缘=si=0坊北边缘，南边缘=si=4坊南边缘
+		# 仅包含内部街道，不含边界街道
+		var p_west := 0.0
+		for ci in range(3):
+			p_west += float(NS_FANG_WIDTHS[ci]) + float(NS_STREET_WIDTHS[ci])
+		var p_east := p_west + float(NS_FANG_WIDTHS[3]) + float(NS_STREET_WIDTHS[3]) + float(NS_FANG_WIDTHS[4]) + float(NS_STREET_WIDTHS[4]) + float(NS_FANG_WIDTHS[5]) + float(NS_STREET_WIDTHS[5]) + float(NS_FANG_WIDTHS[6])
+		var p_north := 0.0
+		var p_south := float(EW_FANG_DEPTHS[0]) + float(EW_STREET_WIDTHS[1]) + float(EW_FANG_DEPTHS[1]) + float(EW_STREET_WIDTHS[2]) + float(EW_FANG_DEPTHS[2]) + float(EW_STREET_WIDTHS[3]) + float(EW_FANG_DEPTHS[3])
+		var pcx := (p_west + p_east) * 0.5
+		var pcy := (p_north + p_south) * 0.5
+		var pw_steps := (p_east - p_west)
+		var pw := pw_steps * STEP
+		var ph := (p_south - p_north) * STEP
+		# E方向偏移：皇宫ew方向总宽度的3%
+		var e_offset := pw_steps * 0.03
+		var offset_x := e_offset * STEP * 64.0
+		var offset_y := e_offset * STEP * 32.0
+		var pnode := Node2D.new()
+		pnode.set_script(FangScript)
+		pnode.name = "皇宫"
+		pnode.position = _step_iso(pcx, pcy) + Vector2(offset_x, offset_y)
+		pnode.set("fang_name", "宫城")
+		pnode.set("fang_w", pw)
+		pnode.set("fang_h", ph)
+		pnode.set("cell", Vector2(5, 2))
+		pnode.set("z_index", int(pcy * 0.4))
+		pnode.set("tex", palace_tex)
+		# UV缩放修正：ew方向扩大5%，ns方向缩小10%
+		pnode.set("uv_scale_ew", 0.926)
+		pnode.set("uv_scale_ns", 1.111)
+		get_node("World/Buildings").add_child(pnode)
+		print("=== 皇宫贴图加载完毕 ===")
 
 # 给某个坊取贴图：只返回精确匹配的专属贴图，无匹配则返回null（显示纯色）
 func _fang_tex_for(fname: String, si: int, ci: int) -> Texture2D:
@@ -898,6 +944,10 @@ func _set_zoom(idx: int, snap: bool = false) -> void:
 		_target_pos = _cam_pos_for(_zoom_idx)
 		_camera.zoom = Vector2(_target_zoom, _target_zoom)
 		_camera.position = _target_pos
+	# auto-close far-view card when zooming out of far view
+	if _far_card_open and _zoom_idx != 0:
+		_far_card_open = false
+		_far_card = {}
 	_free_pan = false
 	var _view_mode := "far" if _zoom_idx == 0 else ("near" if _zoom_idx == ZOOM_LEVELS.size() - 1 else "mid")
 	GameManager.set_view_mode(_view_mode)
@@ -1346,6 +1396,217 @@ func codex_collected_list(cat: int) -> Array:
 		result.append(card.get("name", ""))
 	return result
 
+# ==================== far-view knowledge cards ====================
+func far_card_panel_rect() -> Rect2:
+	return BUILDING_PANEL_RECT
+
+func far_card_close_rect() -> Rect2:
+	var pr := far_card_panel_rect()
+	return Rect2(pr.end.x - 44.0, pr.position.y + 12.0, 28.0, 28.0)
+
+func far_card_minimap_rect() -> Rect2:
+	var pr := far_card_panel_rect()
+	return Rect2(pr.position.x + 20.0, pr.position.y + 148.0, pr.size.x - 40.0, 180.0)
+
+func _find_far_card(entity: Dictionary) -> Dictionary:
+	# 1. Check pre-built cards first
+	var ename := String(entity.get("name", ""))
+	for card in _far_cards:
+		if String(card.get("name", "")) == ename:
+			return card
+	# 2. Dynamic generation for fang entities
+	var ekey := String(entity.get("key", ""))
+	if ekey.begins_with("FANG-"):
+		var parts := ekey.substr(5).split("-")
+		if parts.size() == 2:
+			var col := int(parts[0])
+			var row := int(parts[1])
+			var fc := _build_far_card_for_fang(col, row)
+			var mm := _build_fang_minimap(col, row)
+			_far_mini_maps[fc["map_key"]] = mm
+			return fc
+	# 3. Dynamic generation for road entities
+	if ekey.begins_with("STREET-"):
+		var parts := ekey.substr(7).split("-")
+		if parts.size() == 2:
+			var dir: String = parts[0].to_lower()
+			var idx := int(parts[1])
+			var rc := _build_far_card_for_road(dir, idx)
+			var mm := _build_road_minimap(dir, idx)
+			_far_mini_maps[rc["map_key"]] = mm
+			return rc
+	return {}
+
+func _close_far_card() -> void:
+	_far_card_open = false
+	_far_card = {}
+	if _ui:
+		_ui.queue_redraw()
+
+# ---- dynamic far-view card generation for any entity ----
+func _build_far_card_for_fang(col: int, row: int) -> Dictionary:
+	var fname := _fang_name_of(col, row)
+	var ew_size := int(float(NS_FANG_WIDTHS[col])) if col < NS_FANG_WIDTHS.size() else 0
+	var ns_size := int(float(EW_FANG_DEPTHS[row])) if row < EW_FANG_DEPTHS.size() else 0
+	var n_road: String = EW_STREET_NAMES[row] if row < EW_STREET_NAMES.size() else ""
+	var e_road: String = NS_STREET_NAMES[col] if col < NS_STREET_NAMES.size() else ""
+	var where := ""
+	if e_road != "":
+		where = e_road + "东第" + str(col + 1) + "列"
+	if n_road != "" and where != "":
+		where += " · " + n_road + "之北"
+	elif n_road != "":
+		where = n_road + "之北"
+	var chips: Array = []
+	if ew_size > 0 and ns_size > 0:
+		chips.append("东西约" + str(ew_size) + "步")
+		chips.append("南北约" + str(ns_size) + "步")
+	if n_road != "":
+		chips.append("北为" + n_road)
+	if e_road != "":
+		chips.append("东为" + e_road)
+	var scale_text := ""
+	if ew_size > 0 and ns_size > 0:
+		scale_text = "尺寸：东西" + str(ew_size) + "步 × 南北" + str(ns_size) + "步"
+	var brief := fname + "，东西约" + str(ew_size) + "步，南北约" + str(ns_size) + "步。"
+	if n_road != "":
+		brief += "北侧为" + n_road + "。"
+	if e_road != "":
+		brief += "东侧为" + e_road + "。"
+	return {
+		"id": "FANG-%d-%d" % [col, row],
+		"type": "Fang",
+		"kind": "里坊 · FANG",
+		"name": fname,
+		"pinyin": "",
+		"where": where,
+		"brief": brief,
+		"scale": scale_text,
+		"chips": chips,
+		"symbol": "坊",
+		"map_key": "gen_fang_%d_%d" % [col, row],
+	}
+
+func _build_far_card_for_road(dir: String, idx: int) -> Dictionary:
+	var is_ew := (dir.to_lower() == "ew")
+	var w: int = 0
+	var l: int = 0
+	var sname := ""
+	var dir_cn := ""
+	var dir_en := ""
+	if is_ew:
+		w = int(float(EW_STREET_WIDTHS[idx])) if idx < EW_STREET_WIDTHS.size() else 0
+		l = 9663
+		sname = EW_STREET_NAMES[idx] if idx < EW_STREET_NAMES.size() else "东西大街"
+		dir_cn = "东西"
+		dir_en = "E-W"
+	else:
+		w = int(float(NS_STREET_WIDTHS[idx])) if idx < NS_STREET_WIDTHS.size() else 0
+		l = 8668
+		sname = NS_STREET_NAMES[idx] if idx < NS_STREET_NAMES.size() else "南北大街"
+		dir_cn = "南北"
+		dir_en = "N-S"
+	var chips: Array = []
+	if w > 0:
+		chips.append("路宽" + str(w) + "步")
+	chips.append("全长" + str(l) + "步")
+	chips.append(dir_cn + "向道路")
+	var scale_text := ""
+	if w > 0:
+		scale_text = "原文宽度：" + str(w) + "步"
+	var brief := sname + "，路宽" + str(w) + "步，贯穿" + dir_cn + "，全长" + str(l) + "步。"
+	return {
+		"id": "STREET-" + dir_en + "-%d" % idx,
+		"type": "Road",
+		"kind": "道路 · ROAD",
+		"name": sname,
+		"pinyin": "",
+		"where": sname,
+		"brief": brief,
+		"scale": scale_text,
+		"chips": chips,
+		"symbol": "街",
+		"map_key": "gen_road_" + dir_en + "_%d" % idx,
+	}
+
+func _build_fang_minimap(col: int, row: int) -> Dictionary:
+	# 3x3 grid: center = target fang, neighbors = adjacent fangs
+	var sc: int = clampi(col - 1, 0, 9)
+	var ec: int = clampi(col + 1, 0, 9)
+	var nr: int = clampi(row - 1, 0, 12)
+	var sr: int = clampi(row + 1, 0, 12)
+	var blocks: Array = []
+	for rr in range(nr, sr + 1):
+		for cc in range(sc, ec + 1):
+			var fn := _fang_name_of(cc, rr)
+			var is_focus := (cc == col and rr == row)
+			var bx: float = float(cc - sc) / 3.0
+			var by: float = float(rr - nr) / 3.0
+			blocks.append({
+				"rect": [bx + 0.02, by + 0.02, 0.29, 0.29],
+				"focus": is_focus,
+				"alt": not is_focus,
+				"label": fn if fn != "里坊" else "",
+				"label_pos": [bx + 0.165, by + 0.18],
+			})
+	var routes: Array = []
+	# north road
+	if row > 0 and nr == row - 1:
+		routes.append({"dir": "h", "pos": 0.33, "width": 0.008})
+	# south road
+	if row < 12 and sr == row + 1:
+		routes.append({"dir": "h", "pos": 0.66, "width": 0.008})
+	# east road
+	if col < 9 and ec == col + 1:
+		routes.append({"dir": "v", "pos": 0.66, "width": 0.008})
+	# west road
+	if col > 0 and sc == col - 1:
+		routes.append({"dir": "v", "pos": 0.33, "width": 0.008})
+	return {"blocks": blocks, "routes": routes, "arrows": []}
+
+func _build_road_minimap(dir: String, idx: int) -> Dictionary:
+	var is_ew := (dir.to_lower() == "ew")
+	var blocks: Array = []
+	var routes: Array = []
+	if is_ew:
+		# horizontal road with fangs north and south
+		var ew_mid_col := 5
+		var north_label: String = _fang_name_of(ew_mid_col, maxi(idx - 1, 0))
+		var south_label: String = _fang_name_of(ew_mid_col, mini(idx, 12))
+		blocks.append({"rect": [0.1, 0.05, 0.8, 0.35], "focus": false, "alt": true, "label": north_label if north_label != "里坊" else "", "label_pos": [0.5, 0.2]})
+		blocks.append({"rect": [0.1, 0.6, 0.8, 0.35], "focus": false, "alt": false, "label": south_label if south_label != "里坊" else "", "label_pos": [0.5, 0.77]})
+		routes.append({"dir": "h", "pos": 0.5, "width": 0.012})
+		return {"blocks": blocks, "routes": routes, "arrows": [{"text": "▲ 北", "x": 0.48, "y": 0.02}],
+			"center_label": {"text": EW_STREET_NAMES[idx] if idx < EW_STREET_NAMES.size() else "", "x": 0.35, "y": 0.48, "rotated": false},
+			"label_color": "dark"}
+	else:
+		# vertical road with fangs west and east
+		var ns_mid_row := 6
+		var west_label: String = _fang_name_of(maxi(idx - 1, 0), ns_mid_row)
+		var east_label: String = _fang_name_of(mini(idx, 9), ns_mid_row)
+		blocks.append({"rect": [0.05, 0.1, 0.35, 0.8], "focus": false, "alt": true, "label": west_label if west_label != "里坊" else "", "label_pos": [0.22, 0.5]})
+		blocks.append({"rect": [0.6, 0.1, 0.35, 0.8], "focus": false, "alt": false, "label": east_label if east_label != "里坊" else "", "label_pos": [0.77, 0.5]})
+		routes.append({"dir": "v", "pos": 0.5, "width": 0.012})
+		return {"blocks": blocks, "routes": routes, "arrows": [{"text": "▲ 北", "x": 0.48, "y": 0.02}],
+			"center_label": {"text": NS_STREET_NAMES[idx] if idx < NS_STREET_NAMES.size() else "", "x": 0.53, "y": 0.46, "rotated": true},
+			"label_color": "dark"}
+
+func _build_panel_minimap(entity: Dictionary) -> Dictionary:
+	var key: String = entity.get("key", "")
+	if key.begins_with("FANG-"):
+		var parts := key.split("-")
+		if parts.size() >= 3:
+			var col := int(parts[1])
+			var row := int(parts[2])
+			return _build_fang_minimap(col, row)
+	elif key.begins_with("STREET-"):
+		var parts := key.split("-")
+		if parts.size() >= 3:
+			var dir: String = parts[1]
+			var idx := int(parts[2])
+			return _build_road_minimap(dir, idx)
+	return {}
+
 # 参数为 1280x720 设计系坐标：左侧拦截带（左栏）与底部时间轴带
 func _is_screen_ui_band(p: Vector2) -> bool:
 	var w := LEFT_BAR_EXPANDED_W if not _left_bar_collapsed else LEFT_BAR_COLLAPSED_W
@@ -1361,6 +1622,8 @@ func _is_blocked_screen_ui_band(p: Vector2) -> bool:
 # 点击点（1280x720 设计系）是否落在已展开知识卡片（面板本体或关闭 ✕）上。
 # 用于让面板命中优先于与其重叠的右上角时间指示区（TIME_AREA_RECT）。
 func _ui_panel_at(p: Vector2) -> bool:
+	if _far_card_open:
+		return far_card_panel_rect().has_point(p)
 	if _selected.is_empty():
 		return false
 	if building_close_rect().has_point(p):
@@ -1369,6 +1632,12 @@ func _ui_panel_at(p: Vector2) -> bool:
 
 # 知识卡片展开时，其面板区域应拦截对背景地图的点击（但面板内的关闭/追问按钮仍可点）
 func _is_panel_blocking(p: Vector2) -> bool:
+	if _far_card_open:
+		if not far_card_panel_rect().has_point(p):
+			return false
+		if far_card_close_rect().has_point(p):
+			return false
+		return true
 	if _selected.is_empty():
 		return false
 	if not BUILDING_PANEL_RECT.has_point(p):
@@ -1796,6 +2065,15 @@ func _handle_click(screen_pos: Vector2) -> void:
 			_hist_scroll = 0.0
 		_ui.queue_redraw()
 		return
+	# far-view card click handling
+	if _far_card_open:
+		if far_card_close_rect().has_point(ui_pos):
+			_close_far_card()
+			return
+		if not far_card_panel_rect().has_point(ui_pos):
+			_close_far_card()
+			return
+		return
 	if _is_blocked_screen_ui_band(ui_pos):
 		return
 	if _group_chat_open and group_chat_close_rect().has_point(ui_pos):
@@ -2212,6 +2490,21 @@ func _hit_test(pos: Vector2) -> Dictionary:
 			return p
 	return {}
 func _select(p: Dictionary) -> void:
+	# far-view: show simplified card if entity matches
+	if _zoom_idx == 0 and not _far_cards.is_empty():
+		var fc := _find_far_card(p)
+		if not fc.is_empty():
+			_far_card = fc
+			_far_card_open = true
+			_selected = {}
+			_panel_anim_t = 0.0
+			_panel_opening = false
+			if _ui:
+				_ui.queue_redraw()
+			return
+		# entity doesn't match any far card - close existing far card
+		if _far_card_open:
+			_close_far_card()
 	_follow_group = -1
 	_group_chat_open = false
 	_selected = p
