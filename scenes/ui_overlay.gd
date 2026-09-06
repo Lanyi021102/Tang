@@ -517,86 +517,72 @@ func _draw_group_chat() -> void:
 	draw_line(send_rect.get_center() + Vector2(1.0, -10.0), send_rect.get_center() + Vector2(8.0, -8.0), Color("#efe1b7", 0.9), 2.0)
 
 # 右上角时间指示：地平线 + 太阳/月亮沿半圆轨迹运动（左升起、右落下）
+# 右上角时钟：表盘.png（盘面）+ 指针.png 复制为两根（长=分针、短=时针，共用同一贴图缩放）。
+# 点击（TIME_AREA_RECT）弹出时辰栏，选择后指针平滑转至对应时辰。
 func _draw_sun_moon() -> void:
 	if map == null:
 		return
+	var area := Rect2(1112.0, 14.0, 166.0, 124.0)
 	var cx := 1195.0
-	var horizon_y := 100.0
-	var radius := 62.0
-	var hour: float = map._time_of_day
-	var area := Rect2(1112.0, 14.0, 166.0, 120.0)
-	# 背景颜色随时辰平滑变化（午夜黑 → 清晨红 → 正午白 → 傍晚红 → 午夜黑）
-	var bg_col: Color
-	if hour < 6.0:
-		var tb := hour / 6.0
-		bg_col = Color("#0a0d18").lerp(Color("#c96a4a"), tb * tb)   # 夜→晨
-	elif hour < 12.0:
-		var tb := (hour - 6.0) / 6.0
-		bg_col = Color("#c96a4a").lerp(Color("#f7f2e2"), tb * tb)   # 晨→正午
-	elif hour < 18.0:
-		var tb := (hour - 12.0) / 6.0
-		bg_col = Color("#f7f2e2").lerp(Color("#c96a4a"), tb * tb)   # 正午→傍晚
-	else:
-		var tb := (hour - 18.0) / 6.0
-		bg_col = Color("#c96a4a").lerp(Color("#0a0d18"), tb * tb)   # 傍晚→夜
-	# 背景圆角面板（区分周围）：上半部分随时辰变色，下半部分固定黑色
-	var upper := Rect2(area.position, Vector2(area.size.x, horizon_y - area.position.y + 4.0))
-	var lower := Rect2(area.position.x, horizon_y + 2.0, area.size.x, area.end.y - horizon_y - 2.0)
-	_round_rect_fill(area, 14.0, Color(0.05, 0.05, 0.07, 0.96))
-	_round_rect_fill(upper, 14.0, Color(bg_col.r, bg_col.g, bg_col.b, 0.92))
-	# 下半部分固定黑色（遮住底色）
-	_round_rect_fill(lower, 6.0, Color(0.04, 0.04, 0.05, 0.98))
+	var cy := 68.0
+	# 背景圆角面板（青绿墨，保留时辰信息层级）
+	_round_rect_fill(area, 14.0, Color(0.05, 0.09, 0.09, 0.94))
 	_round_rect_stroke(area, 14.0, Color("#c9a45a", 0.55), 1.5)
-	# 地平线
-	draw_line(Vector2(cx - 68.0, horizon_y), Vector2(cx + 68.0, horizon_y), Color("#3a362e", 0.85), 2.0)
-	draw_line(Vector2(cx - 68.0, horizon_y + 3.0), Vector2(cx + 68.0, horizon_y + 3.0), Color("#3a362e", 0.3), 1.0)
-	# 夜晚时背景中的星星
-	var is_night: bool = hour < 5.0 or hour >= 19.0
-	if is_night:
-		var rng := RandomNumberGenerator.new()
-		rng.seed = 2024
-		for i in range(16):
-			var sx := 1118.0 + rng.randf_range(0.0, 152.0)
-			var sy := 22.0 + rng.randf_range(0.0, 74.0)
-			var tw := 0.5 + rng.randf_range(0.0, 0.8)
-			draw_circle(Vector2(sx, sy), tw, Color(0.95, 0.97, 1.0, 0.75))
-	# 半圆轨迹（虚线示意）
-	var trail := PackedVector2Array()
-	for i in range(19):
-		var a := PI - float(i) / 18.0 * PI
-		trail.append(Vector2(cx + cos(a) * radius, horizon_y - sin(a) * radius))
-	for i in range(trail.size() - 1):
-		draw_line(trail[i], trail[i + 1], Color("#c9a45a", 0.32), 1.0)
-	# 太阳（白天 6-18 时）：正午 12 时在正上方
-	var sun_visible: bool = hour >= 6.0 and hour <= 18.0
-	if sun_visible:
-		var t: float = (hour - 6.0) / 12.0          # 0(6时) → 1(18时)
-		var ang: float = PI * (1.0 - t)             # PI(左) → 0(右)
-		var pos := Vector2(cx + cos(ang) * radius, horizon_y - sin(ang) * radius)
-		# 太阳光晕（放大）
-		for i in range(4):
-			draw_circle(pos, 22.0 - float(i) * 5.0, Color(1.0, 0.82, 0.45, 0.32 - float(i) * 0.07))
-		draw_circle(pos, 12.0, Color("#f4c86a"))
-		draw_circle(pos, 9.0, Color("#ffe9a8"))
-		# 光芒（放大）
-		for i in range(8):
-			var ga: float = float(i) / 8.0 * TAU + hour * 0.4
-			draw_line(pos + Vector2(cos(ga), sin(ga)) * 14.0, pos + Vector2(cos(ga), sin(ga)) * 21.0, Color("#f4c86a", 0.75), 3.0)
-	# 月亮（夜晚 18-6 时）：午夜 0 时在正上方
-	var moon_hour: float = fmod(hour + 12.0, 24.0)   # 月亮相位 = 太阳 + 12h
-	var moon_visible: bool = moon_hour >= 6.0 and moon_hour <= 18.0
-	if moon_visible:
-		var t2: float = (moon_hour - 6.0) / 12.0
-		var ang2: float = PI * (1.0 - t2)
-		var pos2 := Vector2(cx + cos(ang2) * radius, horizon_y - sin(ang2) * radius)
-		draw_circle(pos2, 22.0, Color(0.9, 0.95, 1.0, 0.22))
-		draw_circle(pos2, 11.0, Color("#e8f0f8"))
-		# 月牙（放大，以背景色挖去）
-		draw_circle(pos2 + Vector2(-3.8, -1.0), 9.2, Color(bg_col.r, bg_col.g, bg_col.b, 0.96))
-		draw_circle(pos2, 11.0, Color("#e8f0f8"))
-	# 时间文字（时辰）：地平线下方固定白色
-	var label: String = map.shichen_label(hour)
-	_text_center(map.font_song, label, 15.0, Color(1.0, 1.0, 1.0, 1.0), Vector2(cx, area.end.y - 14.0))
+	var dial_size := 96.0
+	var hour_frac := fposmod(map._time_of_day, 24.0)
+	if map.dial_tex != null:
+		# 表盘素材：保持比例、与指针轴心(cy)同圆心
+		var dial_rect := Rect2(cx - dial_size * 0.5, cy - dial_size * 0.5, dial_size, dial_size)
+		draw_texture_rect(map.dial_tex, dial_rect, false, Color(1, 1, 1, 0.98))
+	else:
+		# 兜底：无素材时手绘圆盘+12刻度
+		draw_circle(Vector2(cx, cy), dial_size * 0.5, Color("#f2ead6"))
+		draw_arc(Vector2(cx, cy), dial_size * 0.5, 0.0, TAU, 64, Color("#c9a45a"), 1.5)
+		for i in range(12):
+			var a := float(i) / 12.0 * TAU - PI * 0.5
+			var tick_col := Color("#b98a48", 0.85) if i == int(hour_frac / 2.0) % 12 else Color("#b98a48", 0.4)
+			draw_line(Vector2(cx + cos(a) * dial_size * 0.44, cy + sin(a) * dial_size * 0.44), Vector2(cx + cos(a) * dial_size * 0.49, cy + sin(a) * dial_size * 0.49), tick_col, 1.4)
+	# 长短双针（指针素材黑底已转透明；长=分针、短=时针）
+	if map.hand_tex != null:
+		# 素材：针尾(pivot)≈(278,1006)、针尖≈(1104,213)，初始朝向≈-43.8°(y向下)
+		var pivot := Vector2(278.0, 1006.0)
+		var hand_len := 1191.0   # pivot→tip 像素长度
+		var tip_dir_deg := -43.8
+		var hand_size := Vector2(1254.0, 1254.0)
+		var cc := Vector2(cx, cy)
+		# 表盘中心为旋转轴心；数字:0时=顶端(12点方向)
+		# 分针（长）：60分钟一圈
+		var minutes := fposmod(hour_frac, 1.0) * 60.0
+		var ang_min := minutes / 60.0 * 360.0
+		var rot_min := deg_to_rad(ang_min - 90.0 - tip_dir_deg)
+		var s_min := (dial_size * 0.44) / hand_len
+		draw_set_transform(cc, rot_min, Vector2(s_min, s_min))
+		draw_texture_rect(map.hand_tex, Rect2(-pivot, hand_size), false, Color(1, 1, 1, 0.98))
+		# 时针（短）：12 小时一圈。注意不能叠加分钟修正（会在整点时发生 mod-360 回跳），
+		# 因此直接用 12h 连续角度；分钟走满一小时时针跨过一格仍自然。
+		var hour_12 := fmod(hour_frac, 12.0)
+		var ang_hour := hour_12 / 12.0 * 360.0
+		var rot_hour := deg_to_rad(ang_hour - 90.0 - tip_dir_deg)
+		var s_hour := s_min * 0.58
+		draw_set_transform(cc, rot_hour, Vector2(s_hour, s_hour))
+		draw_texture_rect(map.hand_tex, Rect2(-pivot, hand_size), false, Color(1, 1, 1, 0.98))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		# 轴帽
+		draw_circle(cc, 3.0, Color("#8f3028"))
+		draw_circle(cc, 1.6, Color("#f2e6cc"))
+	else:
+		# 兜底：无指针素材时绘制单指针（原有逻辑）
+		var ang := hour_frac * 15.0
+		var rad := deg_to_rad(ang - 90.0)
+		var tip := Vector2(cx + cos(rad) * dial_size * 0.36, cy + sin(rad) * dial_size * 0.36)
+		var tail := Vector2(cx - cos(rad) * dial_size * 0.10, cy - sin(rad) * dial_size * 0.10)
+		draw_line(tail, tip, Color("#5a2018"), 2.6)
+		draw_line(tail, tip, Color("#8f3028"), 1.4)
+		draw_circle(Vector2(cx, cy), 3.0, Color("#8f3028"))
+		draw_circle(Vector2(cx, cy), 1.6, Color("#f2e6cc"))
+	# 时辰文字（表盘下方）
+	var label: String = map.shichen_label(hour_frac)
+	_text_center(map.font_song, label, 15.0, Color(1.0, 1.0, 1.0, 0.96), Vector2(cx, area.end.y - 9.0))
 
 func _draw_clock_popup() -> void:
 	var pr: Rect2 = map.clock_popup_rect()
@@ -634,13 +620,6 @@ func _draw_hist_timeline() -> void:
 	)
 	var label := "展开时间轴" if anim < 0.5 else "收起时间轴"
 	_draw_btn_frame(tr, label, "timeline_toggle")
-	# 时钟贴图（美术「时钟」）钉在整条时间轴的右端外侧，不随「收起」按钮滑动；
-	# 时间轴收展只影响其淡入淡出，位置始终 = 时间轴条右端。
-	if map.clock_tex != null:
-		var clock_size := 44.0
-		var tl_r: Rect2 = map.HIST_TIMELINE_RECT
-		var cr := Rect2(tl_r.end.x + 6.0, tl_r.position.y + (tl_r.size.y - clock_size) * 0.5, clock_size, clock_size)
-		draw_texture_rect(map.clock_tex, cr, false, Color(1, 1, 1, 0.55 + 0.45 * anim))
 	# 展开状态的时间轴内容：随动画从下方滑入 + 淡入（非线性）
 	if anim > 0.02:
 		draw_set_transform(Vector2(0.0, (1.0 - e) * 60.0), 0.0, Vector2.ONE)

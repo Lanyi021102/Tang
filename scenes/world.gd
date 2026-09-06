@@ -9,7 +9,7 @@ const GRID_COLS := 12
 const GRID_ROWS := 13
 const STEP := 0.1
 const GROUND := Color("#d8ccab")
-const CITY_ROAD := Color("#8fb8c9")
+const CITY_ROAD := Color("#7fae92")
 
 func _ready() -> void:
 	pass

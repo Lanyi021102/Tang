@@ -96,6 +96,8 @@ var font_qiji: Font
 var fang_tag_tex: Texture2D
 var btn_frame_tex: Texture2D
 var clock_tex: Texture2D
+var dial_tex: Texture2D      # 右上时钟表盘（表盘.png）
+var hand_tex: Texture2D      # 右上时钟指针（指针.png，黑底已转透明，长=分针/短=时针共用）
 var _points: Array = []
 var _cfg: Dictionary = {}
 var _square_tex: Array = []  # 正方形坊贴图
@@ -106,6 +108,8 @@ var _camera: Camera2D
 var _selected: Dictionary = {}
 var _selected_fang := Vector2(-1, -1)
 var _hover_fang := Vector2(-1, -1)
+# 皇宫（宫城+皇城整体）步坐标命中范围，由 _build_world 皇宫节点创建时写入；无效=(-1,-1)
+var _palace_step_rect := Rect2(-1.0, -1.0, 0.0, 0.0)
 var _local_text := ""
 var _loading := false
 var _error := ""
@@ -199,6 +203,7 @@ var _world
 var _npcs_node
 var _markers_node
 var _outline_layer
+var _fang_labels  # 顶层坊名标签层（World/FangLabels，z 最高）
 
 # camera zoom state
 # 三档离散（近/中/远按钮吸附用）
@@ -382,6 +387,29 @@ func _setup_fonts() -> void:
 	fang_tag_tex = load("res://assets/ui/fang_label_tag.png") if ResourceLoader.exists("res://assets/ui/fang_label_tag.png") else null
 	btn_frame_tex = load("res://assets/ui/btn_frame.png") if ResourceLoader.exists("res://assets/ui/btn_frame.png") else null
 	clock_tex = load("res://assets/ui/clock.png") if ResourceLoader.exists("res://assets/ui/clock.png") else null
+	# 右上角时钟：表盘 + 指针（指针黑底在绘制层转透明；同一指针素材复制为分针/时针）
+	dial_tex = load("res://assets/ui/dial_face.png") if ResourceLoader.exists("res://assets/ui/dial_face.png") else clock_tex
+	hand_tex = _key_out_black("res://assets/ui/hand_needle.png") if ResourceLoader.exists("res://assets/ui/hand_needle.png") else null
+
+# 把黑底 PNG 转成透明底纹理（避免叠加黑色方块）。阈值：RGB 均低于阈值视为背景。
+func _key_out_black(path: String) -> Texture2D:
+	var tex: Texture2D = load(path)
+	if tex == null:
+		return null
+	var img := tex.get_image()
+	if img == null:
+		return null
+	img.convert(Image.FORMAT_RGBA8)
+	var th := 0.28   # 亮度阈值（黑背景 0 ~ 金色/亮色 >0.3）
+	var w := img.get_width()
+	var h := img.get_height()
+	for y in range(h):
+		for x in range(w):
+			var c := img.get_pixel(x, y)
+			var lum := c.r * 0.299 + c.g * 0.587 + c.b * 0.114
+			if lum < th:
+				img.set_pixel(x, y, Color(0, 0, 0, 0))
+	return ImageTexture.create_from_image(img)
 
 func _sync_from_data() -> void:
 	_points = DataManager.points
@@ -700,6 +728,47 @@ func _build_world() -> void:
 						node.set("uv_rotation_degrees", uv.rot)
 			fangs_node.add_child(node)
 			node.call("set_map_ref", self)
+	# ---- 皇宫（宫城+皇城整体）贴图：中/近景显示贴图与标签，远景由 fang_tile far_view 显示占位框与标签 ----
+	var palace_path := "res://assets/fang/皇宫01.png"
+	if ResourceLoader.exists(palace_path):
+		var palace_tex: Texture2D = load(palace_path)
+		# 皇宫区域：ci=3-6, si=0-3（宫城+皇城共12坊大小）
+		# 西边缘=ci=3坊西边缘，东边缘=ci=7坊东边缘，北=si=0坊北缘，南=si=4坊南缘
+		var p_west := 0.0
+		for ci in range(3):
+			p_west += float(NS_FANG_WIDTHS[ci]) + float(NS_STREET_WIDTHS[ci])
+		var p_east := p_west + float(NS_FANG_WIDTHS[3]) + float(NS_STREET_WIDTHS[3]) + float(NS_FANG_WIDTHS[4]) + float(NS_STREET_WIDTHS[4]) + float(NS_FANG_WIDTHS[5]) + float(NS_STREET_WIDTHS[5]) + float(NS_FANG_WIDTHS[6])
+		var p_north := 0.0
+		var p_south := float(EW_FANG_DEPTHS[0]) + float(EW_STREET_WIDTHS[1]) + float(EW_FANG_DEPTHS[1]) + float(EW_STREET_WIDTHS[2]) + float(EW_FANG_DEPTHS[2]) + float(EW_STREET_WIDTHS[3]) + float(EW_FANG_DEPTHS[3])
+		var pcx := (p_west + p_east) * 0.5
+		var pcy := (p_north + p_south) * 0.5
+		var pw_steps := p_east - p_west
+		var pw := pw_steps * STEP
+		var ph := (p_south - p_north) * STEP
+		# E方向偏移：皇宫ew方向总宽度的3%（向右下微调对位）
+		var e_offset := pw_steps * 0.03
+		var offset_x := e_offset * STEP * 64.0
+		var offset_y := e_offset * STEP * 32.0
+		var pnode := Node2D.new()
+		pnode.set_script(FangScript)
+		pnode.name = "皇宫"
+		pnode.position = _step_iso(pcx, pcy) + Vector2(offset_x, offset_y)
+		pnode.set("fang_name", "宫城")
+		pnode.set("fang_w", pw)
+		pnode.set("fang_h", ph)
+		pnode.set("cell", Vector2(5, 2))
+		# z 提到合法上限：盖过横贯宫城/皇城的街道网格（南北街 4095），
+		# 顶层 FangLabels 同为 4096 但在 World 末尾创建（后画），保证标签在最上。
+		pnode.set("z_index", 4096)
+		pnode.set("tex", palace_tex)
+		# UV缩放修正：ew方向扩大8%，ns方向缩小10%
+		pnode.set("uv_scale_ew", 0.926)
+		pnode.set("uv_scale_ns", 1.111)
+		fangs_node.add_child(pnode)
+		pnode.call("set_map_ref", self)
+		# 记录皇宫整体步坐标矩形（供点击命中）
+		_palace_step_rect = Rect2(p_west, p_north, p_east - p_west, p_south - p_north)
+		print("=== 皇宫贴图加载完毕 ===")
 	var fang_area_ew := float(NS_FANG_WIDTHS.reduce(func(a, b): return a + b, 0)) + float(NS_STREET_WIDTHS.reduce(func(a, b): return a + b, 0))  # = 9663
 	var fang_area_ns := float(EW_FANG_DEPTHS.reduce(func(a, b): return a + b, 0)) + float(EW_STREET_WIDTHS.reduce(func(a, b): return a + b, 0)) - float(EW_STREET_WIDTHS[0]) - float(EW_STREET_WIDTHS[13])  # 不含南北边界路
 	for si in range(15):
@@ -730,7 +799,7 @@ func _build_world() -> void:
 		node.set("road_width", int(float(EW_STREET_WIDTHS[mini(si, 13)])))
 		node.set("road_length", int(road_len))
 		node.set("z_index", int(road_y * 0.4))
-		node.set("color", Color("#8fb8c9"))
+		node.set("color", Color("#7fae92"))
 		streets_node.add_child(node)
 		node.call("set_map_ref", self)
 	# ---- 创建南北向街道（只覆盖坊区域）----
@@ -762,9 +831,21 @@ func _build_world() -> void:
 		node.set("road_width", int(float(NS_STREET_WIDTHS[mini(ci, 10)])))
 		node.set("road_length", int(road_len))
 		node.set("z_index", 4095)
-		node.set("color", Color("#7daab8"))
+		node.set("color", Color("#6f9d84"))
 		streets_node.add_child(node)
 		node.call("set_map_ref", self)
+
+	# ---- 顶层坊名标签层：挂在 World 最后、z 最高，保证坊标签盖过坊框/街道/建筑 ----
+	var labels_node = get_node_or_null("World/FangLabels")
+	if labels_node == null:
+		var FangLabelsScript := load("res://scenes/fang_labels.gd")
+		labels_node = Node2D.new()
+		labels_node.name = "FangLabels"
+		labels_node.set_script(FangLabelsScript)
+		labels_node.z_index = 4096
+		_world.add_child(labels_node)
+	_fang_labels = labels_node
+	_fang_labels.set_map_ref(self)
 
 func _redraw_world() -> void:
 	if _world:
@@ -773,6 +854,8 @@ func _redraw_world() -> void:
 		_npcs_node.queue_redraw()
 	if _markers_node:
 		_markers_node.queue_redraw()
+	if _fang_labels:
+		_fang_labels.queue_redraw()
 
 func _build_ui() -> void:
 	_ui = get_node("UI/Overlay")
@@ -868,6 +951,8 @@ func _refresh_fang_labels() -> void:
 	if fangs_node:
 		for child in fangs_node.get_children():
 			child.queue_redraw()
+	if _fang_labels:
+		_fang_labels.queue_redraw()
 
 func _ease_out_cubic(t: float) -> float:
 	var u := 1.0 - t
@@ -1693,6 +1778,12 @@ func _handle_click(screen_pos: Vector2) -> void:
 		_selected_fang = Vector2(-1, -1)
 		_select(hit)
 		return
+	# 皇宫（宫城+皇城整体贴图）命中：位于大矩形内 → 打开皇宫知识卡
+	if _palace_at(world_pos):
+		_selected_fang = Vector2(-1, -1)
+		_select(_palace_data())
+		_redraw_world()
+		return
 	var fang := _fang_at(world_pos)
 	if fang.x >= 0:
 		_selected_fang = fang
@@ -1716,6 +1807,30 @@ func _world_to_step(world_pos: Vector2) -> Vector2:
 	var sx := (world_pos.x / (STEP * 64.0) + world_pos.y / (STEP * 32.0)) * 0.5
 	var sy := (world_pos.y / (STEP * 32.0) - world_pos.x / (STEP * 64.0)) * 0.5
 	return Vector2(sx, sy)
+
+# 皇宫区域点击命中：点击坐标转换到步坐标后落在皇宫大矩形内即命中
+func _palace_at(world_pos: Vector2) -> bool:
+	if _palace_step_rect.size.x <= 0.0 or _palace_step_rect.size.y <= 0.0:
+		return false
+	var step := _world_to_step(world_pos)
+	return _palace_step_rect.has_point(step)
+
+# 皇宫知识卡数据（宫城+皇城整体）
+func _palace_data() -> Dictionary:
+	return {
+		"key": "PALACE-宫城皇城",
+		"name": "宫城",
+		"trad": "皇城",
+		"type": "宫殿",
+		"zone": "长安城北 · 宫城与皇城",
+		"description": "宫城是皇帝居住与处理朝政的宫殿区，位于长安城北部中央；其南为皇城，集中分布中央官署。二者合称皇宫，是唐长安城的政治中枢。",
+		"location": "宫城（北）与皇城（南），朱雀门街中轴线北端",
+		"function": "皇帝朝寝与中央官署理政之地",
+		"built": "隋开皇二年（582年）始建大兴城宫城",
+		"aliases": "宫城; 皇城; 皇宫",
+		"quote": "北据高原，南望爽垲，宫殿台阁，周回数里。",
+		"source": "《唐两京城坊考》卷一·宫城/皇城",
+	}
 
 # 矩形点击检测：世界坐标 → 命中的坊 (si, ci)，未命中返回 Vector2(-1, -1)
 func _fang_at(world_pos: Vector2) -> Vector2:

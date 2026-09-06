@@ -7,7 +7,7 @@ var tile_name := ""   # 街道名称
 var tile_type := ""   # "东西街道" 或 "南北街道"
 var road_width := 0   # 路宽（步）
 var road_length := 0  # 路长（步）
-var color := Color("#8fb8c9")
+var color := Color("#7fae92")
 var map
 
 const INK := Color("#2a3a42")
