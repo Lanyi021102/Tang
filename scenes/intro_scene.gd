@@ -13,19 +13,9 @@ var font_hei: Font
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	# 中文用 qiji-fallback，英文/数字用 Times New Roman（与近景/中景/远景按钮同款中文）
-	var qiji_path := "res://assets/fonts/qiji-fallback.ttf"
-	var qiji_ff := FontFile.new()
-	if ResourceLoader.exists(qiji_path):
-		if qiji_ff.load_dynamic_font(qiji_path) != OK:
-			qiji_ff = FontFile.new()
-	var base := SystemFont.new()
-	base.font_names = PackedStringArray(["Times New Roman", "Times", "Georgia"])
-	base.allow_system_fallback = true
-	if qiji_ff != null and qiji_ff.get_data() != PackedByteArray():
-		base.fallbacks = [qiji_ff]
-	font_song = base
-	font_hei = base
+	# 中文 qiji-fallback，英文/数字 Times New Roman（打包 FontFile，全平台一致）
+	font_song = FontKit.composite()
+	font_hei = FontKit.composite()
 	# 从「开始菜单」卷轴滚入完毕后切换过来，直接处于已覆盖（舆图展开呈现）状态
 	phase = 1
 	t = ENTER

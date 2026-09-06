@@ -96,14 +96,8 @@ func _render_ground_texture() -> ImageTexture:
 	return ImageTexture.create_from_image(img)
 
 func _setup_fonts() -> void:
-	var sf := SystemFont.new()
-	sf.font_names = PackedStringArray(["QIJIFALLBACK", "Songti SC", "Songti", "STSongti-SC-Regular", "STHeiti", "PingFang SC", "Heiti SC"])
-	sf.allow_system_fallback = true
-	font_song = sf
-	var hf := SystemFont.new()
-	hf.font_names = PackedStringArray(["QIJIFALLBACK", "STHeiti", "PingFang SC", "Heiti SC"])
-	hf.allow_system_fallback = true
-	font_hei = hf
+	font_song = FontKit.composite()
+	font_hei = FontKit.composite()
 
 func _draw() -> void:
 	var s := minf(size.x / DESIGN_W, size.y / DESIGN_H)

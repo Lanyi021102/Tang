@@ -227,14 +227,8 @@ func _draw_walkers() -> void:
 			draw_texture_rect_region(tex, dst, src, Color(1, 1, 1, 0.96))
 
 func _setup_fonts() -> void:
-	var sf := SystemFont.new()
-	sf.font_names = PackedStringArray(["QIJIFALLBACK", "Songti SC", "Songti", "STSongti-SC-Regular", "STHeiti", "PingFang SC", "Heiti SC"])
-	sf.allow_system_fallback = true
-	font_song = sf
-	var hf := SystemFont.new()
-	hf.font_names = PackedStringArray(["QIJIFALLBACK", "STHeiti", "PingFang SC", "Heiti SC"])
-	hf.allow_system_fallback = true
-	font_hei = hf
+	font_song = FontKit.composite()
+	font_hei = FontKit.composite()
 
 # 中英文案
 func _t(zh: String, en: String) -> String:

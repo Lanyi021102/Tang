@@ -382,25 +382,12 @@ func _snap_far_entry() -> void:
 		_ui.queue_redraw()
 
 func _setup_fonts() -> void:
-	# 主字体：英文/数字用 Times New Roman，中文回退到 qiji-fallback（同近景/中景/远景按钮字体）
-	var qiji_path := "res://assets/fonts/qiji-fallback.ttf"
-	var qiji_ff := FontFile.new()
-	if ResourceLoader.exists(qiji_path):
-		if qiji_ff.load_dynamic_font(qiji_path) != OK:
-			qiji_ff = FontFile.new()
-	var base := SystemFont.new()
-	base.font_names = PackedStringArray(["Times New Roman", "Times", "Georgia"])
-	base.allow_system_fallback = true
-	if qiji_ff != null and qiji_ff.get_data() != PackedByteArray():
-		base.fallbacks = [qiji_ff]
-	font_song = base
-	font_hei = base
-	font_qiji = qiji_ff
-	# 时间轴/大事记的公元年份数字用 Times New Roman
-	var tf := SystemFont.new()
-	tf.font_names = PackedStringArray(["Times New Roman", "Times", "Georgia", "STIX Two Text", "QIJIFALLBACK"])
-	tf.allow_system_fallback = true
-	font_times = tf
+	# 中文 qiji-fallback，英文/数字 Times New Roman（均打包，FontFile 加载，全平台一致）
+	font_song = FontKit.composite()
+	font_hei = FontKit.composite()
+	font_qiji = FontKit.cjk()
+	# 时间轴/大事记的公元年份数字用 Times New Roman（打包）
+	font_times = FontKit.latin()
 	# 新美术素材：坊名标签底图 / 左栏按钮框 / 时钟贴图
 	fang_tag_tex = load("res://assets/ui/fang_label_tag.png") if ResourceLoader.exists("res://assets/ui/fang_label_tag.png") else null
 	btn_frame_tex = load("res://assets/ui/btn_frame.png") if ResourceLoader.exists("res://assets/ui/btn_frame.png") else null

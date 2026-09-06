@@ -27,9 +27,9 @@ var _scroll_t := -1.0   # 卷轴滚入进度：-1=未开始, 0→1=卷帘从开�
 var _qiji_font:Font
 
 func _ready():
-	song=_font(["STSong","SimSun","Noto Serif CJK SC"])
-	sans=_font(["Microsoft YaHei","PingFang SC","Noto Sans CJK SC"])
-	_qiji_font=_qiji_composite()
+	song=FontKit.composite()
+	sans=FontKit.composite()
+	_qiji_font=FontKit.cjk()
 	bg=load("res://assets/ui/home_full.png")
 	paper=load("res://assets/ui/ink/ui_paper_fiber_tile.png")
 	title_art=load("res://assets/ui/title_changan_works.png") if ResourceLoader.exists("res://assets/ui/title_changan_works.png") else null
