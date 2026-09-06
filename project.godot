@@ -23,6 +23,7 @@ DataManager="*res://autoload/DataManager.gd"
 GameManager="*res://autoload/GameManager.gd"
 NetworkManager="*res://autoload/NetworkManager.gd"
 SceneTransition="*res://autoload/SceneTransition.gd"
+MusicManager="*res://autoload/MusicManager.gd"
 
 [display]
 

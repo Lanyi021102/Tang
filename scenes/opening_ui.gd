@@ -7,13 +7,13 @@ const RED=Color("#8f3028")
 const GOLD=Color("#a88a54")
 const MENU=["图鉴","设置","进入长安","坊区档案","营造值","任务"]
 const LEAVE_SCENE="res://scenes/ChangAnCity.tscn"
-const BUTTON_RECTS=[Rect2(1486,72,181,72),Rect2(1684,72,188,72),Rect2(704,866,530,154),Rect2(1510,810,363,66),Rect2(1510,886,168,115),Rect2(1688,886,184,115)]
+const BUTTON_RECTS=[Rect2(1486,72,181,72),Rect2(1684,72,188,72),Rect2(658,833,600,204),Rect2(1510,810,363,66),Rect2(1510,886,168,115),Rect2(1688,886,184,115)]
 var song:Font
 var sans:Font
 var sc=1.0
 var off=Vector2.ZERO
 var hover=-1
-var focus=0
+var focus=-1  # 键盘焦点：开机无默认选中，仅悬停或按方向键时才高亮
 var elapsed=0.0
 var toast=""
 var toast_t=0.0
@@ -36,6 +36,8 @@ func _ready():
 	for path in ["res://assets/ui/home_codex_button.png","res://assets/ui/home_settings_button.png","res://assets/ui/home_enter_button.png","res://assets/ui/home_archive_button.png","res://assets/ui/home_value_button.png","res://assets/ui/home_task_button.png"]:
 		button_tex.append(load(path))
 	set_process(true)
+	# 首页背景音乐（MusicManager 自动交叉淡入；进入城市时切「长安闲情」）
+	MusicManager.play("start")
 
 func _font(names:Array)->Font:
 	var f=SystemFont.new()
@@ -79,7 +81,7 @@ func _draw_menu():
 	for i in range(MENU.size()):
 		var a=clampf((elapsed-.18-i*.05)/.35,0,1)
 		var r=BUTTON_RECTS[i]
-		var active=i==hover or i==focus
+		var active=(i==hover) or (focus>=0 and i==focus)
 		var tint=Color(1.12,1.08,0.88,a) if active else Color(1,1,1,a)
 		if i<button_tex.size() and button_tex[i]:
 			draw_texture_rect(button_tex[i],r,false,tint)
@@ -123,9 +125,10 @@ func _gui_input(e):
 				_activate(i)
 	elif e is InputEventKey and e.pressed and not e.echo:
 		if settings and e.keycode==KEY_ESCAPE: settings=false
-		elif e.keycode in [KEY_DOWN,KEY_S]: focus=(focus+1)%MENU.size()
-		elif e.keycode in [KEY_UP,KEY_W]: focus=(focus-1+MENU.size())%MENU.size()
-		elif e.keycode in [KEY_ENTER,KEY_SPACE]: _activate(focus)
+		elif e.keycode in [KEY_DOWN,KEY_S]: focus=0 if focus<0 else (focus+1)%MENU.size()
+		elif e.keycode in [KEY_UP,KEY_W]: focus=(MENU.size()-1) if focus<0 else (focus-1+MENU.size())%MENU.size()
+		elif e.keycode in [KEY_ENTER,KEY_SPACE]:
+			if focus>=0: _activate(focus)
 		queue_redraw()
 
 func _activate(i):

@@ -15,23 +15,8 @@ func _step_iso(sx: float, sy: float) -> Vector2:
 	return Vector2((sx - sy) * STEP * 64.0, (sx + sy) * STEP * 32.0)
 
 func _draw() -> void:
-	if map == null or map._zoom_idx < 1:
-		return
-	var zoom: float = map._camera.zoom.x
-	for gi in range(map._groups.size()):
-		var g: Dictionary = map._groups[gi]
-		for m in g["members"]:
-			# dc/dr 是网格偏移，转换为步偏移（1 网格单位 ≈ 800 步）
-			var sx := float(g["c"]) + float(m["dc"]) * 800.0
-			var sy := float(g["r"]) + float(m["dr"]) * 800.0
-			var p := _step_iso(sx, sy)
-			_draw_figure(p)
-	for s in map._speaking:
-		var gi: int = s["gi"]
-		if gi < 0 or gi >= map._groups.size():
-			continue
-		var g: Dictionary = map._groups[gi]
-		_draw_speak_bubble(_step_iso(float(g["c"]), float(g["r"])), zoom, s)
+	# 按产品需求停用：不再绘制街上走动的路人小人图形与头顶说话气泡图标。
+	return
 
 func _draw_figure(p: Vector2) -> void:
 	var s := 1.0

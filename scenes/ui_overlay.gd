@@ -191,11 +191,11 @@ func _detect_ui_hover() -> String:
 	# 左侧工具栏按钮（展开状态下；收起时按钮隐藏，不再响应）
 	if not map._left_bar_collapsed:
 		var left_btns := [
-			{"key": "left_back", "rect": Rect2(14.0, 18.0, 100.0, 42.0)},
-			{"key": "left_near", "rect": Rect2(20.0, 100.0, 88.0, 88.0)},
-			{"key": "left_mid", "rect": Rect2(20.0, 206.0, 88.0, 88.0)},
-			{"key": "left_far", "rect": Rect2(20.0, 312.0, 88.0, 88.0)},
-			{"key": "left_codex", "rect": Rect2(20.0, 420.0, 88.0, 88.0)},
+			{"key": "left_back", "rect": Rect2(8.0, 14.0, 112.0, 36.0)},
+			{"key": "left_near", "rect": Rect2(8.0, 96.0, 112.0, 36.0)},
+			{"key": "left_mid", "rect": Rect2(8.0, 148.0, 112.0, 36.0)},
+			{"key": "left_far", "rect": Rect2(8.0, 200.0, 112.0, 36.0)},
+			{"key": "left_codex", "rect": Rect2(8.0, 252.0, 112.0, 36.0)},
 		]
 		for b in left_btns:
 			if Rect2(b["rect"]).has_point(p):
@@ -334,8 +334,6 @@ func _draw() -> void:
 	var has: bool = map != null and map._panel_anim_t > 0.01
 	if has:
 		_draw_panel()
-	if map != null and map._far_card_open:
-		_draw_far_card_panel()
 	_draw_group_chat()
 	if map != null and map._clock_open:
 		_draw_clock_popup()
@@ -376,17 +374,16 @@ func _draw_top_function_band() -> void:
 	if e > 0.01:
 		var band := Rect2(10.0, 16.0, 106.0, 514.0)
 		_draw_texture_layer(_ink_title_dark, band, false, 0.62 * e)
-		_text_left(map.font_song, "长安", 24.0, Color("#f2e6cc", e), Vector2(29.0, 50.0))
-		_text_left(map.font_hei, "开元图卷", 8.0, Color("#b98a48", e * 0.82), Vector2(58.0, 61.0))
+		# 左侧功能按钮：横向长条（按钮框 3:1 比例），纵排
 		var btns := [
-			{"key": "left_back", "rect": Rect2(14.0, 18.0, 100.0, 42.0), "t": "返回"},
-			{"key": "left_near", "rect": Rect2(20.0, 100.0, 88.0, 88.0), "t": "近景"},
-			{"key": "left_mid", "rect": Rect2(20.0, 206.0, 88.0, 88.0), "t": "中景"},
-			{"key": "left_far", "rect": Rect2(20.0, 312.0, 88.0, 88.0), "t": "远景"},
-			{"key": "left_codex", "rect": Rect2(20.0, 420.0, 88.0, 88.0), "t": "图鉴"},
+			{"key": "left_back", "rect": Rect2(8.0, 14.0, 112.0, 36.0), "t": "返回"},
+			{"key": "left_near", "rect": Rect2(8.0, 96.0, 112.0, 36.0), "t": "近景"},
+			{"key": "left_mid", "rect": Rect2(8.0, 148.0, 112.0, 36.0), "t": "中景"},
+			{"key": "left_far", "rect": Rect2(8.0, 200.0, 112.0, 36.0), "t": "远景"},
+			{"key": "left_codex", "rect": Rect2(8.0, 252.0, 112.0, 36.0), "t": "图鉴"},
 		]
 		for b in btns:
-			_draw_left_card(Rect2(b["rect"]), String(b["t"]), String(b["key"]))
+			_draw_btn_frame(Rect2(b["rect"]), String(b["t"]), String(b["key"]))
 	# 收起布局（窄条 + 切换按钮，淡入量 = 1-e）
 	if e < 0.99:
 		var ca := 1.0 - e
@@ -400,6 +397,32 @@ func _draw_top_function_band() -> void:
 			lerpf(expanded_r.size.y, collapsed_r.size.y, ca)
 		)
 		_draw_left_card(tr, "≫" if e < 0.5 else "≪ 收起", "left_toggle")
+
+# 左侧功能按钮（返回/近景/中景/远景/图鉴）：用美术「按钮框」贴图作底，
+# 保持横向长条比例绘制（不拉成正方形），按钮文字用 qiji 字体横排。
+func _draw_btn_frame(r: Rect2, text: String, key: String) -> void:
+	var tex: Texture2D = map.btn_frame_tex
+	var tint := Color(1.0, 1.0, 1.0, 0.98)
+	if _is_hot(key):
+		tint = Color(1.08, 1.05, 0.96, 1.0) if not _is_pressed(key) else Color(0.92, 0.9, 0.86, 1.0)
+	if tex != null:
+		var tw: float = tex.get_width()
+		var th: float = tex.get_height()
+		if tw > 0.0 and th > 0.0:
+			# 等比缩放铺满按钮矩形（矩形比例本就接近贴图 3:1，不额外裁切成正方形）
+			draw_texture_rect(tex, r, false, tint)
+	else:
+		_round_rect_fill(r, 10.0, _ca(Color("#efe5cf"), 0.96))
+		_round_rect_stroke(r, 8.0, Color(0.48, 0.24, 0.12, 0.7), 1.4)
+	_draw_hover_accent(r, 8.0, key, 1.0)
+	var font: Font = map.font_qiji if map.font_qiji != null else map.font_song
+	var label_col := Color("#f5ead2")
+	var fs := 15.0
+	# 先描边再实字，保证在各种底色上都可读
+	for ox in [-1, 1]:
+		for oy in [-1, 1]:
+			_text_center(font, text, fs, Color(0.1, 0.06, 0.05, 0.55), r.get_center() + Vector2(ox, oy))
+	_text_center(font, text, fs, label_col, r.get_center())
 
 # 左侧功能按钮：与知识卡片选项（追问按钮）一致的视觉
 func _draw_left_card(r: Rect2, text: String, key: String) -> void:
@@ -599,9 +622,9 @@ func _draw_clock_popup() -> void:
 func _draw_hist_timeline() -> void:
 	var anim: float = clampf(map._timeline_anim, 0.0, 1.0)
 	var e: float = map._ease_in_out_cubic(anim)
-	# 收起/展开切换按钮：位置随动画在两种状态间滑动
-	var collapsed_r := Rect2(560.0, 694.0, 160.0, 26.0)
-	var expanded_r := Rect2(560.0, 614.0, 160.0, 26.0)
+	# 收起/展开切换按钮：与左侧功能按钮同风格（按钮框贴图 + qiji 字体横排）
+	var collapsed_r := Rect2(580.0, 686.0, 120.0, 34.0)
+	var expanded_r := Rect2(580.0, 610.0, 120.0, 34.0)
 	var k: float = 1.0 - e
 	var tr := Rect2(
 		lerpf(expanded_r.position.x, collapsed_r.position.x, k),
@@ -609,8 +632,15 @@ func _draw_hist_timeline() -> void:
 		lerpf(expanded_r.size.x, collapsed_r.size.x, k),
 		lerpf(expanded_r.size.y, collapsed_r.size.y, k)
 	)
-	var label := "▲ 展开时间轴" if anim < 0.5 else "▼ 收起"
-	_draw_left_card(tr, label, "timeline_toggle")
+	var label := "展开时间轴" if anim < 0.5 else "收起时间轴"
+	_draw_btn_frame(tr, label, "timeline_toggle")
+	# 时钟贴图（美术「时钟」）钉在整条时间轴的右端外侧，不随「收起」按钮滑动；
+	# 时间轴收展只影响其淡入淡出，位置始终 = 时间轴条右端。
+	if map.clock_tex != null:
+		var clock_size := 44.0
+		var tl_r: Rect2 = map.HIST_TIMELINE_RECT
+		var cr := Rect2(tl_r.end.x + 6.0, tl_r.position.y + (tl_r.size.y - clock_size) * 0.5, clock_size, clock_size)
+		draw_texture_rect(map.clock_tex, cr, false, Color(1, 1, 1, 0.55 + 0.45 * anim))
 	# 展开状态的时间轴内容：随动画从下方滑入 + 淡入（非线性）
 	if anim > 0.02:
 		draw_set_transform(Vector2(0.0, (1.0 - e) * 60.0), 0.0, Vector2.ONE)
@@ -733,149 +763,17 @@ func _draw_codex_illustration(r: Rect2, revealed: bool) -> void:
 		var x := r.position.x + 34.0 + float(i) * 7.0
 		draw_line(Vector2(x, ground_y - 10.0), Vector2(x, ground_y - 2.0), Color("#816133", alpha * 0.74), 0.8)
 
-# ==================== far-view card rendering ====================
-func _draw_far_card_panel() -> void:
-	var card: Dictionary = map._far_card
-	if card.is_empty():
-		return
-	var pr: Rect2 = map.far_card_panel_rect()
-	var a: float = clampf(map._panel_anim_t, 0.0, 1.0)
-	if a <= 0.01:
-		a = 1.0
-	# panel background
-	_draw_ink_panel(pr, true, 10.0, a)
-	# close button
-	var close_r: Rect2 = map.far_card_close_rect()
-	_draw_ink_close(close_r, a, "far_close")
-	# type label + far badge
-	var kind := String(card.get("kind", ""))
-	_text_left(map.font_hei, kind.to_upper(), 11.0, _ca(Color("#c99b45"), a), Vector2(pr.position.x + 26.0, pr.position.y + 34.0))
-	_text_right(map.font_hei, "FAR", 10.0, _ca(Color("#9aaa94"), a), Vector2(pr.end.x - 48.0, pr.position.y + 34.0))
-	# name + pinyin
-	var name := String(card.get("name", ""))
-	var pinyin := String(card.get("pinyin", ""))
-	_text_left(map.font_hei, pinyin, 11.0, _ca(Color("#98702f"), a), Vector2(pr.position.x + 26.0, pr.position.y + 66.0))
-	_text_left(map.font_song, name, 40.0, _ca(Color("#c99b45"), a), Vector2(pr.position.x + 26.0, pr.position.y + 112.0))
-	# mini-map
-	var mm: Rect2 = map.far_card_minimap_rect()
-	_draw_far_minimap(mm, card, a)
-	# brief description
-	var brief := String(card.get("brief", ""))
-	var by: float = mm.end.y + 16.0
-	_draw_card_text(brief, pr.position.x + 26.0, by, pr.size.x - 52.0, 3, a, Color("#e0d3a9"), 13.0)
-	# scale info bar
-	var sy: float = by + 52.0
-	var scale_text := String(card.get("scale", ""))
-	if scale_text != "":
-		var scale_rect := Rect2(pr.position.x + 26.0, sy, pr.size.x - 52.0, 30.0)
-		_round_rect_fill(scale_rect, 4.0, _ca(Color("#03150d"), a * 0.5))
-		draw_line(Vector2(scale_rect.position.x, scale_rect.position.y), Vector2(scale_rect.position.x, scale_rect.end.y), _ca(Color("#c99b45"), a), 2.0)
-		_text_left(map.font_hei, "SCALE", 9.0, _ca(Color("#98702f"), a), Vector2(scale_rect.position.x + 8.0, scale_rect.position.y + 18.0))
-		_text_right(map.font_hei, scale_text, 11.0, _ca(Color("#dfc784"), a), Vector2(scale_rect.end.x - 8.0, scale_rect.position.y + 18.0))
-		sy += 38.0
-	# chips (tags)
-	var chips: Array = card.get("chips", [])
-	var cx := pr.position.x + 26.0
-	for chip in chips:
-		var ct := String(chip)
-		var cw: float = map.font_hei.get_string_size(ct, HORIZONTAL_ALIGNMENT_LEFT, -1, 10.0).x + 16.0
-		var chip_rect := Rect2(cx, sy, cw, 22.0)
-		_round_rect_fill(chip_rect, 11.0, _ca(Color("#03150d"), a * 0.4))
-		_round_rect_stroke(chip_rect, 11.0, _ca(Color("#c99b45", 0.22), a), 1.0)
-		_text_center(map.font_hei, ct, 10.0, _ca(Color("#9aaa94"), a), chip_rect.get_center())
-		cx += cw + 6.0
-	# footer: entity id + symbol
-	var fy := pr.end.y - 35.0
-	var eid := String(card.get("id", ""))
-	_text_left(map.font_hei, eid, 10.0, _ca(Color("#98702f"), a), Vector2(pr.position.x + 26.0, fy))
-	var symbol := String(card.get("symbol", ""))
-	var seal := Rect2(pr.end.x - 72.0, pr.end.y - 66.0, 46.0, 46.0)
-	draw_rect(seal, _ca(Color("#c99b45"), a), false, 1.0)
-	_text_center(map.font_song, symbol, 23.0, _ca(Color("#c99b45"), a), seal.get_center())
-
-func _draw_far_minimap(r: Rect2, card: Dictionary, a: float) -> void:
-	# background
-	_round_rect_fill(r, 4.0, _ca(Color("#e8e3d5"), a))
-	# grid lines
-	var grid_col := _ca(Color("#83afba", 0.4), a)
-	var gx := r.position.x
-	while gx < r.end.x:
-		draw_line(Vector2(gx, r.position.y), Vector2(gx, r.end.y), grid_col, 0.5)
-		gx += 28.0
-	var gy := r.position.y
-	while gy < r.end.y:
-		draw_line(Vector2(r.position.x, gy), Vector2(r.end.x, gy), grid_col, 0.5)
-		gy += 28.0
-	# inner shadow
-	_round_rect_stroke(r, 4.0, _ca(Color("#806638", 0.33), a), 1.0)
-	# get mini_map data
-	var map_key := String(card.get("map_key", ""))
-	var mm_data: Dictionary = map._far_mini_maps.get(map_key, {})
-	if mm_data.is_empty():
-		return
-	var label_col_dark := _ca(Color("#292d2a"), a)
-	var label_col_light := _ca(Color("#f0e4c4"), a)
-	var lc_type := String(mm_data.get("label_color", "light"))
-	var lcol := label_col_light if lc_type == "light" else label_col_dark
-	# draw routes
-	var routes: Array = mm_data.get("routes", [])
-	for route in routes:
-		var rd := String(route.get("dir", "v"))
-		var rp: float = float(route.get("pos", 0.5))
-		var rw: float = float(route.get("width", 0.008)) * r.size.x
-		if rw < 4.0: rw = 6.0
-		if rd == "v":
-			var rx := r.position.x + rp * r.size.x
-			draw_rect(Rect2(rx - rw * 0.5, r.position.y, rw, r.size.y), _ca(Color("#d3a343"), a))
-		else:
-			var ry := r.position.y + rp * r.size.y
-			draw_rect(Rect2(r.position.x, ry - rw * 0.5, r.size.x, rw), _ca(Color("#d3a343"), a))
-	# draw blocks
-	var blocks: Array = mm_data.get("blocks", [])
-	for blk in blocks:
-		var br: Array = blk.get("rect", [0.1, 0.1, 0.3, 0.3])
-		var bx := r.position.x + float(br[0]) * r.size.x
-		var by := r.position.y + float(br[1]) * r.size.y
-		var bw := float(br[2]) * r.size.x
-		var bh := float(br[3]) * r.size.y
-		var brect := Rect2(bx, by, bw, bh)
-		var is_focus: bool = blk.get("focus", false)
-		var is_alt: bool = blk.get("alt", false)
-		var bcol := Color("#272b28") if is_focus else (Color("#656a65") if is_alt else Color("#373b38"))
-		draw_rect(brect, _ca(bcol, a))
-		if is_focus:
-			draw_rect(brect, _ca(Color("#d3a343"), a), false, 2.0)
-		var blabel := String(blk.get("label", ""))
-		if blabel != "":
-			var lp: Array = blk.get("label_pos", [0.5, 0.5])
-			var lx := r.position.x + float(lp[0]) * r.size.x
-			var ly := r.position.y + float(lp[1]) * r.size.y
-			draw_string(map.font_hei, Vector2(lx, ly + 5.0), blabel, HORIZONTAL_ALIGNMENT_LEFT, -1, 10.0, lcol)
-	# draw center label (for roads)
-	if mm_data.has("center_label"):
-		var cl: Dictionary = mm_data["center_label"]
-		var clx := r.position.x + float(cl.get("x", 0.5)) * r.size.x
-		var cly := r.position.y + float(cl.get("y", 0.5)) * r.size.y
-		var clt := String(cl.get("text", ""))
-		if cl.get("rotated", false):
-			draw_string(map.font_hei, Vector2(clx, cly), clt, HORIZONTAL_ALIGNMENT_LEFT, -1, 10.0, lcol)
-		else:
-			draw_string(map.font_hei, Vector2(clx, cly + 5.0), clt, HORIZONTAL_ALIGNMENT_LEFT, -1, 10.0, lcol)
-	# draw arrows
-	var arrows: Array = mm_data.get("arrows", [])
-	for arr in arrows:
-		var ax := r.position.x + float(arr.get("x", 0.5)) * r.size.x
-		var ay := r.position.y + float(arr.get("y", 0.5)) * r.size.y
-		var at := String(arr.get("text", ""))
-		draw_string(map.font_hei, Vector2(ax, ay + 5.0), at, HORIZONTAL_ALIGNMENT_LEFT, -1, 11.0, _ca(Color("#855c19"), a))
-
 func _draw_zoom_hint() -> void:
+	if map == null or map._left_bar_collapsed:
+		return
 	var names := ["远景（整城）", "中景", "近景（单坊）"]
 	var idx := int(map._zoom_idx)
 	if idx < 0 or idx >= names.size():
 		idx = 1
 	var txt: String = "镜头：" + String(names[idx])
-	_text_left(map.font_hei, txt, 12.0, Color("#d8c9a0", 0.72), Vector2(42.0, 624.0))
+	# 水平居中于左栏（展开宽 128，中心 x=64），垂直位于左栏收起钮(底部 y600)与
+	# 底部时间轴带(顶部 y652)之间的空隙中央。
+	_text_center(map.font_hei, txt, 12.0, Color("#d8c9a0", 0.85), Vector2(64.0, 624.0))
 
 func _frosted(rect: Rect2, radius: float, base: Color, border: Color, a := 1.0) -> void:
 	_round_rect_fill(rect, radius, _ca(base, a))

@@ -124,31 +124,48 @@ func _draw() -> void:
 		_poly(PackedVector2Array([NW, NE, SE, SW]), Color("#cdbb8f"))
 	# 坊名标签：中景及以上（_zoom_idx>=1）显示。直接 draw_string 渲染，
 	# 不创建 SubViewport —— 在 _draw 里新建/变更 SubViewport 树会偶发卡死/报错。
-	# 字号 = 14/zoom（屏幕恒定），须在缩放过程中由 map 逐帧触发重绘校准。
+	# 字号策略：屏幕字高随放大“温和变大”并带上下限（不再纯世界等比——深放大时会过大；
+	# 也不完全恒定 14px——放大后相对地块显得小）。中景默认(zoom 0.04)仍≈14px。
 	if fang_name != "" and map != null and map._zoom_idx >= 1:
-		var zoom: float = map._camera.zoom.x
-		if zoom <= 0.0:
-			zoom = 1.0
-		var fs := 14.0 / zoom
-		var font: Font = map.font_song
+		var zcam: float = 0.04
+		if map != null and map._camera != null:
+			zcam = map._camera.zoom.x
+		if zcam <= 0.0:
+			zcam = 0.04
+		var scr_h := clampf(14.0 * pow(zcam / 0.04, 0.3), 12.0, 26.0)  # 屏幕字高
+		var fs := scr_h / zcam                                    # 换算回世界字号
+		var font: Font = map.font_qiji if map.font_qiji != null else map.font_song
 		var chars := fang_name.split("")
 		var char_w := 0.0
 		for c in chars:
 			char_w = maxf(char_w, font.get_string_size(c, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x)
 		var line_h := fs * 1.15
-		var px := fs * 0.4
+		var px := fs * 0.42
 		var py := fs * 0.3
 		var cw := char_w + px * 2.0
 		var ch := line_h * chars.size() + py * 2.0
-		var rect := Rect2(-cw * 0.5, -ch * 0.5, cw, ch)
-		draw_rect(rect, Color(0.12, 0.10, 0.08, 0.85))
-		draw_rect(rect, Color(0.75, 0.68, 0.55, 0.6), false, maxf(1.0 / zoom, 1.0))
+		# 小标签底图：美术 e1c8f4fa（竖长条）。按文字外框整高缩放，让竖排名字
+		# 落在贴图中央；无贴图时退回深色小底。
+		if map.fang_tag_tex != null:
+			var tw: float = map.fang_tag_tex.get_width()
+			var th: float = map.fang_tag_tex.get_height()
+			if tw > 0.0 and th > 0.0:
+				var pad_y := fs * 0.5
+				var tag_h := ch + pad_y * 2.0
+				var tag_w := tag_h * (tw / th)
+				var tag_rect := Rect2(-tag_w * 0.5, -tag_h * 0.5, tag_w, tag_h)
+				draw_texture_rect(map.fang_tag_tex, tag_rect, false, Color(1, 1, 1, 0.95))
+		else:
+			var rect := Rect2(-cw * 0.5, -ch * 0.5, cw, ch)
+			draw_rect(rect, Color(0.12, 0.10, 0.08, 0.85))
+			draw_rect(rect, Color(0.75, 0.68, 0.55, 0.6), false, maxf(1.0 / map._camera.zoom.x, 1.0))
 		var text_color := Color(0.95, 0.92, 0.85)
 		for i in range(chars.size()):
 			var c: String = chars[i]
-			var cx_w: float = font.get_string_size(c, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-			var cy := -ch * 0.5 + py + line_h * i + fs * 0.8
-			draw_string(font, Vector2(-cx_w * 0.5, cy), c, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, text_color)
+			var y := -ch * 0.5 + py + line_h * i + fs * 0.8
+			# 水平起笔用 em 半宽（-fs/2）而非单字 advance/2：qiji 单字 advance 仅约
+			# 0.8em，墨迹实际按 em 格居中，按 advance 起笔会使整列文字偏右。
+			draw_string(font, Vector2(-fs * 0.5, y), c, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, text_color)
 
 func set_map_ref(m) -> void:
 	map = m

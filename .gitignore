@@ -18,3 +18,15 @@ Desktop.ini
 
 # Secrets / local config
 config/llm_config.json
+
+# 编辑器本地缓存/杂项（扁平 zip 重建时散落在根目录，不入库）
+/editor_layout.cfg
+/editor_script_doc_cache.res
+/editor_script_doc_cache.res-*
+/filesystem_cache10
+/global_script_class_cache.cfg
+/project_metadata.cfg
+/scene_groups_cache.cfg
+/script_editor_cache.cfg
+/uid_cache.bin
+*-folding-*.cfg
