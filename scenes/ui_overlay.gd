@@ -301,6 +301,7 @@ func _sync_left_toggle_btn() -> void:
 func _on_codex_pressed() -> void:
 	map._codex_open = not map._codex_open
 	map._hist_open = false
+	map._hist_anim_target = 0.0
 	if map._codex_open:
 		map._group_chat_open = false
 		if not map._selected.is_empty():
@@ -339,9 +340,9 @@ func _draw() -> void:
 		_draw_clock_popup()
 	# 裁剪容器显隐跟随面板开关状态（关闭时隐藏，避免残留内容）
 	if map != null:
-		_hist_clip.visible = map._hist_open
+		_hist_clip.visible = map._hist_anim > 0.02
 		_codex_clip.visible = false
-	if map != null and map._hist_open:
+	if map != null and (map._hist_open or map._hist_anim > 0.02):
 		_draw_hist_popup()
 	if map != null and map._codex_open:
 		_draw_codex_panel()
@@ -355,10 +356,19 @@ func _draw_screen_ink_vignette() -> void:
 	# 青绿墨底（原近黑墨）：先铺一层青绿，再叠轻墨纹理，形成青绿山水底
 	_round_rect_fill(Rect2(vp.position.x, vp.position.y, left_w, vp.size.y), 0.0, _ca(TEAL_DEEP, 0.92))
 	_draw_texture_layer(_ink_dark, Rect2(vp.position.x, vp.position.y, left_w, vp.size.y), true, 0.5)
+	# 底部时间轴带：用上下渐变的青绿底（上浅下深），避免突兀的实色块
+	var te: float = 1.0
+	if map != null:
+		te = map._ease_in_out_cubic(clampf(map._timeline_anim, 0.0, 1.0))
 	if map == null or not map._timeline_collapsed:
-		_round_rect_fill(Rect2(vp.position.x, vp.end.y - 118.0, vp.size.x, 118.0), 0.0, _ca(TEAL_DEEP, 0.72))
-		_draw_texture_layer(_ink_dark, Rect2(vp.position.x, vp.end.y - 118.0, vp.size.x, 118.0), true, 0.22)
-	_draw_texture_layer(_ink_edge, Rect2(vp.position.x - 10.0, vp.position.y - 8.0, vp.size.x + 20.0, vp.size.y + 16.0), false, 0.26)
+		var band_top := lerpf(690.0, 602.0, te)
+		var band_h := vp.end.y - band_top
+		var strips := 18
+		for s in range(strips):
+			var t := float(s) / float(strips - 1)
+			var a := 0.55 + t * 0.4  # 更不透明：最上方 0.55，最下方 0.95
+			draw_rect(Rect2(vp.position.x, band_top + band_h * float(s) / float(strips), vp.size.x, band_h / float(strips) + 1.0), Color(0.05, 0.16, 0.15, a))
+		_draw_texture_layer(_ink_dark, Rect2(vp.position.x, band_top, vp.size.x, band_h), true, 0.4)
 	# 左侧边缘装饰宽度跟随收起状态（收起时只保留窄条边缘）
 	_draw_texture_layer(_ink_edge, Rect2(-20.0, -6.0, left_w + 32.0, vp.size.y + 12.0), false, 0.4)
 	# 左上角墨雾装饰仅展开时显示（收起时窄条放不下）
@@ -373,7 +383,7 @@ func _draw_top_function_band() -> void:
 	# 展开布局（淡入量 = e）
 	if e > 0.01:
 		var band := Rect2(10.0, 16.0, 106.0, 514.0)
-		_draw_texture_layer(_ink_title_dark, band, false, 0.62 * e)
+		# 不绘制土黄色标题带纹理，仅保留左侧深绿墨底（见 _draw_screen_ink_vignette）
 		# 左侧功能按钮：横向长条（按钮框 3:1 比例），纵排
 		var btns := [
 			{"key": "left_back", "rect": Rect2(8.0, 14.0, 112.0, 36.0), "t": "返回"},
@@ -523,11 +533,9 @@ func _draw_sun_moon() -> void:
 	if map == null:
 		return
 	var area := Rect2(1112.0, 14.0, 166.0, 124.0)
-	var cx := 1195.0
+	var cx := 1190.0   # 与下方时辰列表同中心对齐
 	var cy := 68.0
-	# 背景圆角面板（青绿墨，保留时辰信息层级）
-	_round_rect_fill(area, 14.0, Color(0.05, 0.09, 0.09, 0.94))
-	_round_rect_stroke(area, 14.0, Color("#c9a45a", 0.55), 1.5)
+	# 不再绘制外框黑底面板 / 外框描边（去掉黑色边框与多余外框），仅表盘+指针
 	var dial_size := 96.0
 	var hour_frac := fposmod(map._time_of_day, 24.0)
 	if map.dial_tex != null:
@@ -593,8 +601,7 @@ func _draw_clock_popup() -> void:
 	if alpha <= 0.01:
 		return
 	pr.position.y += slide
-	# 去掉黑黑背景：改为浅色半透明纸面，随时间从上方下拉淡入
-	_draw_ink_panel(pr, false, 10.0, alpha * 0.94)
+	# 去掉白色/浅色面板背景（只保留时辰项）
 	for i in range(map.SHICHEN.size()):
 		var sr: Rect2 = map.shichen_rect(i)
 		sr.position.y += slide
@@ -629,11 +636,7 @@ func _draw_hist_timeline() -> void:
 func _draw_timeline_content(alpha: float) -> void:
 	var r: Rect2 = map.HIST_TIMELINE_RECT
 	var bar := Rect2(r.position.x + 18.0, r.position.y + 18.0, r.size.x - 36.0, 6.0)
-	if _ink_timeline_track:
-		draw_texture_rect(_ink_timeline_track, Rect2(r.position.x, r.position.y + 2.0, r.size.x, 34.0), false, Color(1, 1, 1, 0.76 * alpha))
-	else:
-		_round_rect_fill(bar, 4.0, Color(0.18, 0.29, 0.32, 0.5 * alpha))
-		_round_rect_stroke(bar, 6.0, Color(0.79, 0.64, 0.36, 0.6 * alpha), 1.5)
+	# 时间轴不绘制绿背景块（已移除），仅保留事件节点与年份数字
 	var hot_tl: float = _hover_alpha_of("timeline")
 	if hot_tl > 0.01:
 		_draw_texture_layer(_ink_hover_mist, Rect2(r.position + Vector2(330.0, -20.0), Vector2(450.0, 82.0)), false, 0.38 * alpha * hot_tl)
@@ -670,23 +673,30 @@ func _draw_timeline_content(alpha: float) -> void:
 		draw_circle(Vector2(px, bar.get_center().y), 7.0, Color(0.94, 0.9, 0.82, alpha))
 		draw_arc(Vector2(px, bar.get_center().y), 7.0, 0.0, TAU, 20, Color(DAIQING.r, DAIQING.g, DAIQING.b, 1.0 * alpha), 2.5)
 	var year_int: int = int(round(disp_year))
-	_text_center(map.font_song, "%d" % year_int, 15.0, Color(0.96, 0.85, 0.55, alpha), Vector2(px, bar.end.y + 23.0))
+	_text_center(map.font_times, "%d" % year_int, 15.0, Color(0.96, 0.85, 0.55, alpha), Vector2(px, bar.end.y + 23.0))
 	_text_center(map.font_hei, map.year_era(year_int), 10.0, Color(0.85, 0.79, 0.63, 0.9 * alpha), Vector2(px, bar.end.y + 39.0))
-	_text_left(map.font_hei, "582 开皇二年", 11.0, Color(0.94, 0.88, 0.72, 0.76 * alpha), Vector2(r.position.x + 10.0, r.end.y - 8.0))
-	_text_right(map.font_hei, "907 唐亡", 11.0, Color(0.94, 0.88, 0.72, 0.76 * alpha), Vector2(r.end.x - 10.0, r.end.y - 8.0))
+	_text_left(map.font_times, "582 开皇二年", 11.0, Color(0.94, 0.88, 0.72, 0.76 * alpha), Vector2(r.position.x + 10.0, r.end.y - 8.0))
+	_text_right(map.font_times, "907 唐亡", 11.0, Color(0.94, 0.88, 0.72, 0.76 * alpha), Vector2(r.end.x - 10.0, r.end.y - 8.0))
 
 func _draw_hist_popup() -> void:
 	var pr: Rect2 = map.hist_popup_rect()
-	_draw_ink_panel(pr, true, 12.0)
-	_text_center(map.font_song, "长安城大事记", 20.0, Color("#f2e6cc"), Vector2(pr.get_center().x, pr.position.y + 28.0))
+	var anim: float = clampf(map._hist_anim, 0.0, 1.0)
+	var e: float = map._ease_in_out_cubic(anim)
+	if e <= 0.01:
+		return
+	# 从下到上非线性滑入：面板从下方上移 + 淡入
+	pr.position.y += (1.0 - e) * 90.0
+	_draw_ink_panel(pr, true, 12.0, e * 0.98)
+	_text_center(map.font_song, "长安城大事记", 20.0, Color("#f2e6cc", e), Vector2(pr.get_center().x, pr.position.y + 28.0))
 	var list_top := pr.position.y + 52.0
 	var list_bottom := pr.end.y - 6.0
 	# 列表区使用裁剪容器：遮罩式裁剪，滚动时边框外内容被隐藏
 	_hist_clip.position = Vector2(pr.position.x + 8.0, list_top)
 	_hist_clip.size = Vector2(pr.size.x - 16.0, list_bottom - list_top)
+	_hist_clip.modulate.a = e  # 与面板一起淡入淡出
 	_hist_clip.queue_redraw()
 	if map._timeline.is_empty():
-		_text_center(map.font_hei, "暂无历史数据", 14.0, Color(0.7, 0.74, 0.72), pr.get_center())
+		_text_center(map.font_hei, "暂无历史数据", 14.0, Color(0.7, 0.74, 0.72, e), pr.get_center())
 
 func _draw_codex_panel() -> void:
 	var pr: Rect2 = map.codex_panel_rect()
@@ -866,8 +876,8 @@ func _draw_panel() -> void:
 	var name := String(map._selected.get("name", ""))
 	var type := String(map._selected.get("type", ""))
 	var key := String(map._selected.get("key", ""))
-	_text_left(map.font_hei, _entity_kind(type).to_upper() + " · " + _entity_type_en(type), 11.0, _ca(Color("#c99b45"), a), Vector2(r.position.x + 26.0, r.position.y + 34.0))
-	_text_right(map.font_hei, key, 10.0, _ca(Color("#9aaa94"), a), Vector2(r.end.x - 48.0, r.position.y + 34.0))
+	_text_left(map.font_hei, _entity_kind(type).to_upper() + " · " + _entity_type_en(type), 15.0, _ca(Color("#c99b45"), a), Vector2(r.position.x + 26.0, r.position.y + 34.0))
+	_text_right(map.font_hei, key, 13.0, _ca(Color("#9aaa94"), a), Vector2(r.end.x - 48.0, r.position.y + 34.0))
 	var cb: Rect2 = map.building_close_rect()
 	_round_rect_fill(cb, 9.0, _ca(Color("#c99b45", 0.18), a))
 	var cc := cb.get_center()
@@ -875,17 +885,28 @@ func _draw_panel() -> void:
 	draw_line(cc + Vector2(-3, 3), cc + Vector2(3, -3), _ca(Color("#dfc784"), a), 1.5)
 
 	var p: Dictionary = map._selected
-	if map._knowledge_card_back:
-		_draw_card_back(p, type, r, a)
-	else:
+	# 正面/反面翻转（cos 翻转，同图鉴卡片）：横向挤压到中线再展开，中段换面
+	# 注意：围绕面板中心缩放要用 pos = cc - cc*scale，否则会整体平移导致卡片跑出屏幕
+	var flip_prog: float = clampf(map._card_flip_anim, 0.0, 1.0)
+	var flip_scale_x: float = absf(cos(flip_prog * PI))
+	if flip_scale_x < 0.02:
+		flip_scale_x = 0.02
+	var cc2 := r.get_center()
+	var fs := Vector2(flip_scale_x, 1.0)
+	var fpos := cc2 - Vector2(cc2.x * fs.x, cc2.y * fs.y)
+	draw_set_transform(fpos, 0.0, fs)
+	if flip_prog < 0.5:
 		_draw_card_front(p, type, r, a)
+	else:
+		_draw_card_back(p, type, r, a)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 func _draw_card_front(p: Dictionary, type: String, r: Rect2, a: float) -> void:
 	var name := String(p.get("name", ""))
 	var subtitle := _card_subtitle(p, type)
-	_text_left(map.font_hei, _card_pinyin(name), 11.0, _ca(Color("#98702f"), a), Vector2(r.position.x + 26.0, r.position.y + 66.0))
-	_text_left(map.font_song, name, 45.0, _ca(Color("#c99b45"), a), Vector2(r.position.x + 26.0, r.position.y + 112.0))
-	_text_left(map.font_hei, subtitle, 12.0, _ca(Color("#dfc784"), a), Vector2(r.position.x + 27.0, r.position.y + 133.0))
+	_text_left(map.font_hei, _card_pinyin(name), 13.0, _ca(Color("#98702f"), a), Vector2(r.position.x + 26.0, r.position.y + 66.0))
+	_text_left(map.font_song, name, 36.0, _ca(Color("#c99b45"), a), Vector2(r.position.x + 26.0, r.position.y + 104.0))
+	_text_left(map.font_hei, subtitle, 16.0, _ca(Color("#dfc784"), a), Vector2(r.position.x + 27.0, r.position.y + 134.0))
 	var image_rect := Rect2(r.position.x, r.position.y + 148.0, r.size.x, 350.0)
 	draw_rect(image_rect, _ca(Color("#0e3a29"), a))
 	var tex := _card_texture_for(p, type)
@@ -905,7 +926,7 @@ func _draw_card_front(p: Dictionary, type: String, r: Rect2, a: float) -> void:
 	var w := r.size.x - 52.0
 	var y := image_rect.end.y + 18.0
 	var desc := String(p.get("description", "暂无简介"))
-	_draw_card_text(desc, x, y, w, 3, a, Color("#dfc784"), 12.0)
+	_draw_card_text(desc, x, y, w, 3, a, Color("#dfc784"), 15.0)
 	_text_left(map.font_hei, String(p.get("period", "隋—唐")), 12.0, _ca(Color("#c99b45"), a), Vector2(x, r.end.y - 35.0))
 	_text_left(map.font_hei, "长安城知识图鉴 · 点击卡片翻面", 9.0, _ca(Color("#9aaa94"), a), Vector2(x, r.end.y - 19.0))
 	var seal := Rect2(r.end.x - 72.0, r.end.y - 66.0, 46.0, 46.0)
@@ -913,36 +934,36 @@ func _draw_card_front(p: Dictionary, type: String, r: Rect2, a: float) -> void:
 	_text_center(map.font_song, _entity_symbol(type), 23.0, _ca(Color("#c99b45"), a), seal.get_center())
 
 func _draw_card_back(p: Dictionary, type: String, r: Rect2, a: float) -> void:
-	var x := r.position.x + 18.0
-	var w := r.size.x - 36.0
-	var y := r.position.y + 72.0
-	_text_center(map.font_song, _card_subtitle(p, type), 20.0, _ca(Color("#c99b45"), a), Vector2(r.get_center().x, y + 8.0))
-	y += 28.0
-	var symbol_rect := Rect2(r.get_center().x - 47.0, y, 94.0, 94.0)
-	draw_circle(symbol_rect.get_center(), 46.0, _ca(Color("#0d3828"), a))
-	draw_arc(symbol_rect.get_center(), 46.0, 0.0, TAU, 48, _ca(Color("#c99b45"), a), 2.0)
-	_text_center(map.font_song, _entity_symbol(type), 35.0, _ca(Color("#c99b45"), a), symbol_rect.get_center())
-	y = symbol_rect.end.y + 22.0
-	for row in _basic_rows(p, type):
+	var x := r.position.x + 20.0
+	var w := r.size.x - 40.0
+	var y := r.position.y + 76.0
+	_text_center(map.font_song, _card_subtitle(p, type), 27.0, _ca(Color("#c99b45"), a), Vector2(r.get_center().x, y + 12.0))
+	y += 34.0
+	var symbol_rect := Rect2(r.get_center().x - 54.0, y, 108.0, 108.0)
+	draw_circle(symbol_rect.get_center(), 53.0, _ca(Color("#0d3828"), a))
+	draw_arc(symbol_rect.get_center(), 53.0, 0.0, TAU, 48, _ca(Color("#c99b45"), a), 2.0)
+	_text_center(map.font_song, _entity_symbol(type), 46.0, _ca(Color("#c99b45"), a), symbol_rect.get_center())
+	y = symbol_rect.end.y + 24.0
+	for row in _basic_rows(p, type).slice(0, 4):
 		y = _draw_card_row(String(row[0]), String(row[1]), x, y, w, a)
-	y += 10.0
-	_text_left(map.font_song, "空间与知识关系", 13.0, _ca(Color("#c99b45"), a), Vector2(x, y + 13.0))
-	y += 23.0
+	y += 12.0
+	_text_left(map.font_song, "空间与知识关系", 17.0, _ca(Color("#c99b45"), a), Vector2(x, y + 14.0))
+	draw_line(Vector2(x, y + 20.0), Vector2(x + w, y + 20.0), _ca(Color("#c99b45", 0.25), a), 1.0)
+	y += 26.0
 	for line in _relation_lines(p, type):
 		y = _draw_card_relation(String(line), x, y, w, a)
-	y += 5.0
-	var quote := String(p.get("quote", ""))
-	if quote == "":
-		quote = "暂无可展示的原文摘录"
-	var evidence_rect := Rect2(x, y, w, minf(112.0, r.end.y - 30.0 - y))
-	_round_rect_fill(evidence_rect, 8.0, _ca(Color("#04130c"), a))
-	draw_line(evidence_rect.position, Vector2(evidence_rect.position.x, evidence_rect.end.y), _ca(Color("#c99b45"), a), 2.0)
-	_text_left(map.font_hei, "史料原文", 10.0, _ca(Color("#c99b45"), a), Vector2(x + 10.0, y + 16.0))
-	_draw_card_text("“" + quote + "”", x + 10.0, y + 23.0, w - 20.0, 4, a, Color("#c8c6ae"), 11.0)
-	_text_right(map.font_hei, "点击卡片返回正面", 9.0, _ca(Color("#9aaa94"), a), Vector2(r.end.x - 26.0, r.end.y - 14.0))
+	y += 6.0
+	_text_right(map.font_hei, "点击卡片返回正面", 12.0, _ca(Color("#9aaa94"), a), Vector2(r.end.x - 26.0, r.end.y - 16.0))
 
 func _card_texture_for(p: Dictionary, type: String) -> Texture2D:
-	return _card_textures.get(_card_texture_key(p, type))
+	var key := _card_texture_key(p, type)
+	# 坊：使用该坊专属贴图（与地图一一对应），而非通用坊素材
+	if key == "fang" and map != null:
+		var fname := String(p.get("name", ""))
+		var tex: Texture2D = map._fang_tex_for(fname, 0, 0)
+		if tex != null:
+			return tex
+	return _card_textures.get(key)
 
 func _card_texture_key(p: Dictionary, type: String) -> String:
 	var name := String(p.get("name", ""))
@@ -1017,15 +1038,22 @@ func _image_note(p: Dictionary, type: String) -> String:
 func _draw_card_row(label: String, value: String, x: float, y: float, w: float, a: float) -> float:
 	if value == "":
 		return y
-	_text_left(map.font_hei, label, 10.0, _ca(Color("#98702f"), a), Vector2(x, y + 13.0))
-	_text_left(map.font_hei, _shorten(value, 30), 11.0, _ca(Color("#dfc784"), a), Vector2(x + 58.0, y + 13.0))
-	draw_line(Vector2(x, y + 19.0), Vector2(x + w, y + 19.0), _ca(Color("#c99b45", 0.22), a), 1.0)
-	return y + 23.0
+	_text_left(map.font_hei, label, 12.0, _ca(Color("#98702f"), a), Vector2(x, y + 14.0))
+	var val_x := x + 60.0
+	var val_w := w - 60.0 - 6.0
+	var sz: Vector2 = map.font_hei.get_multiline_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, val_w, 13.0, -1, BRK)
+	draw_multiline_string(map.font_hei, Vector2(val_x, y + 14.0), value, HORIZONTAL_ALIGNMENT_LEFT, val_w, 13.0, -1, _ca(Color("#dfc784"), a), BRK)
+	var lh := maxf(sz.y, 17.0)
+	draw_line(Vector2(x, y + lh + 8.0), Vector2(x + w, y + lh + 8.0), _ca(Color("#c99b45", 0.22), a), 1.0)
+	return y + lh + 14.0
 
 func _draw_card_relation(text: String, x: float, y: float, w: float, a: float) -> float:
-	draw_circle(Vector2(x + 4.0, y + 7.0), 2.3, _ca(Color("#c99b45"), a))
-	_text_left(map.font_hei, _shorten(text, 43), 10.5, _ca(Color("#b9c4b5"), a), Vector2(x + 13.0, y + 12.0))
-	return y + 18.0
+	draw_circle(Vector2(x + 5.0, y + 9.0), 2.5, _ca(Color("#c99b45"), a))
+	var tx := x + 19.0
+	var tw := w - 19.0
+	var sz: Vector2 = map.font_hei.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, tw, 13.0, -1, BRK)
+	draw_multiline_string(map.font_hei, Vector2(tx, y + 14.0), text, HORIZONTAL_ALIGNMENT_LEFT, tw, 13.0, -1, _ca(Color("#b9c4b5"), a), BRK)
+	return y + maxf(sz.y, 17.0) + 10.0
 
 func _draw_card_text(text: String, x: float, y: float, w: float, max_lines: int, a: float, color: Color, fs: float) -> float:
 	draw_multiline_string(map.font_hei, Vector2(x, y + map.font_hei.get_ascent(fs)), text, HORIZONTAL_ALIGNMENT_LEFT, w, fs, max_lines, _ca(color, a), BRK)

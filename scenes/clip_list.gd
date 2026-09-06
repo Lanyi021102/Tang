@@ -167,19 +167,49 @@ func _draw_card_spatial(card: Rect2, e: Dictionary, focus: float, map) -> void:
 # ==================== 大事记列表 ====================
 func _draw_hist_list() -> void:
 	var map = overlay.map
+	var detail_e: float = map._ease_in_out_cubic(clampf(map._hist_detail_anim, 0.0, 1.0))
+	var panel_e: float = map._ease_in_out_cubic(clampf(map._hist_anim, 0.0, 1.0))
+	var sel: int = map._hist_selected
+	# 第一遍：画所有行（左列=公元年份居中，右列=主要内容一行，垂直居中）
+	var asc_t: float = map.font_times.get_ascent(22.0)
+	var desc_t: float = map.font_times.get_descent(22.0)
+	var asc_s: float = map.font_song.get_ascent(16.0)
+	var desc_s: float = map.font_song.get_descent(16.0)
 	for i in range(map._timeline.size()):
 		var er: Rect2 = map.hist_event_rect(i)
 		var local := Rect2(er.position - position, er.size)
 		var ev = map._timeline[i]
 		var year: int = ev["year"]
 		var title := String(ev["title"])
-		var desc := String(ev["desc"])
-		var active: bool = map._current_year == year
+		var selected: bool = sel == i
 		var key := "hist_%d" % i
-		_draw_ink_component(overlay._ink_history_row, local, 7.0, Color(0.16, 0.26, 0.29, 0.8), Color("#f2e6cc", 0.95) if active else Color(0.79, 0.64, 0.36, 0.4), 1.0, key, active)
-		_text_left(map.font_song, "%d" % year, 16.0, Color("#fff0aa") if _is_hot(key) else (Color("#f2e6cc") if active else Color("#d8c9a0")), Vector2(local.position.x + 12.0, local.position.y + 17.0))
-		_text_left(map.font_hei, title, 15.0, Color("#eaf1f0"), Vector2(local.position.x + 72.0, local.position.y + 17.0))
-		_text_left(map.font_hei, desc, 11.0, Color(0.72, 0.76, 0.74), Vector2(local.position.x + 72.0, local.position.y + 31.0))
+		var row_col := Color(0.22, 0.42, 0.38, 0.86) if selected else Color(0.16, 0.26, 0.29, 0.8)
+		var border := Color("#d9efc8", 0.95) if selected else Color(0.79, 0.64, 0.36, 0.4)
+		_draw_ink_component(overlay._ink_history_row, local, 7.0, row_col, border, 1.0, key, selected)
+		var cy := local.get_center().y
+		# 左列：年份（Times，水平+垂直居中）
+		var year_col_cx := local.position.x + 34.0
+		_text_center(map.font_times, "%d" % year, 22.0, Color("#fff0aa") if _is_hot(key) else (Color("#d9efc8") if selected else Color("#d8c9a0")), Vector2(year_col_cx, cy))
+		# 竖直分隔线
+		var sep_x := local.position.x + 58.0
+		draw_line(Vector2(sep_x, local.position.y + 9.0), Vector2(sep_x, local.end.y - 9.0), Color(0.79, 0.64, 0.36, 0.32), 1.0)
+		# 右列：标题（一行，左对齐，垂直居中）
+		draw_string(map.font_song, Vector2(sep_x + 16.0, cy + (asc_s - desc_s) * 0.5), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 16.0, Color("#f2eccf") if selected else Color("#eaf1f0"))
+	# 第二遍：画选中行的绿色细节框（置于所有行之上；其后行已被下推，不遮挡）
+	if sel >= 0 and sel < map._timeline.size() and detail_e > 0.01 and panel_e > 0.01:
+		var er2: Rect2 = map.hist_event_rect(sel)
+		var l2 := Rect2(er2.position - position, er2.size)
+		var ev2 = map._timeline[sel]
+		var desc := String(ev2["desc"])
+		var dh: float = map._hist_detail_shift() * (0.9 if map._hist_detail_anim < 1.0 else 1.0)
+		var dr := Rect2(l2.position.x + 8.0, l2.end.y - 1.0, l2.size.x - 16.0, maxf(dh, 6.0))
+		var fa := detail_e * panel_e
+		_round_rect_fill(dr, 6.0, Color(0.16, 0.40, 0.28, 0.40 * fa))
+		_round_rect_stroke(dr, 6.0, Color("#7bbf82", 0.6 * fa), 1.2)
+		# 介绍跟随动画逐字（逐行）显示
+		var visible: int = int(desc.length() * detail_e)
+		var base_y: float = dr.position.y + 6.0 + map.font_hei.get_ascent(12.0)
+		draw_multiline_string(map.font_hei, Vector2(dr.position.x + 12.0, base_y), desc.substr(0, visible), HORIZONTAL_ALIGNMENT_LEFT, dr.size.x - 24.0, 12.0, 2, Color("#e6f2dd", 0.92 * fa), BRK)
 
 # ==================== 图鉴条目列表 ====================
 func _draw_codex_list() -> void:

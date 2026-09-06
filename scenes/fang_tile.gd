@@ -100,7 +100,6 @@ func _compute_diamond_uv() -> void:
 	uv_right = d["right"]
 
 func _draw() -> void:
-	var far_view: bool = map != null and map._zoom_idx == 0
 	var zcam: float = 0.04
 	if map != null and map._camera != null:
 		zcam = map._camera.zoom.x
@@ -118,20 +117,31 @@ func _draw() -> void:
 	var SE := Vector2((hw + hh) * 6.4, (hw - hh) * 3.2)
 	var SW := Vector2((-hw + hh) * 6.4, (-hw - hh) * 3.2)
 
-	# 远景（idx0）：不渲染坊贴图，只画「坊范围色框」+ 坊名标签，让整城呈网格轮廓。
-	# 中/近景：渲染贴图；无专属贴图的坊退回纯色底。
-	if far_view:
-		# 半透明淡纸色表示坊面，道路蓝透过可见；再描一圈轮廓线（屏幕 1px 宽）
-		_poly(PackedVector2Array([NW, NE, SE, SW]), Color(0.80, 0.76, 0.60, 0.30))
+	# 中/近景与远景之间的纹理渐显系数：随相机缩放连续过渡（约1秒）
+	# 0=远景（淡色框+轮廓）, 1=中/近景（贴图渐显到不透明）
+	var far_z: float = 0.0095
+	var mid_z: float = 0.04
+	if map != null and map.ZOOM_LEVELS.size() >= 2:
+		far_z = map.ZOOM_LEVELS[0]
+		mid_z = map.ZOOM_LEVELS[1]
+	var tex_fade: float = clampf((zcam - far_z) / (mid_z - far_z), 0.0, 1.0)
+	if map != null:
+		tex_fade = map._ease_in_out_cubic(tex_fade)
+	# 远景淡色框随 tex_fade 升高而淡出
+	if tex_fade < 0.999:
+		_poly(PackedVector2Array([NW, NE, SE, SW]), Color(0.80, 0.76, 0.60, 0.30 * (1.0 - tex_fade)))
 		var rim_w := maxf(1.0 / zcam, 1.0)
-		draw_polyline(PackedVector2Array([NW, NE, SE, SW, NW]), Color(0.52, 0.45, 0.30, 0.85), rim_w, true)
-	elif tex:
+		var rim_a := 0.85 * (1.0 - tex_fade)
+		if rim_a > 0.01:
+			draw_polyline(PackedVector2Array([NW, NE, SE, SW, NW]), Color(0.52, 0.45, 0.30, rim_a), rim_w, true)
+	# 中/近景：贴图随 tex_fade 从透明渐显到不透明
+	if tex_fade > 0.005 and tex:
 		var pts := PackedVector2Array([NW, NE, SE, SW])
 		# 内容菱形四顶点映射到地块菱形四角（NW=左, NE=下, SE=右, SW=上）
 		var uvs := PackedVector2Array([uv_left, uv_bottom, uv_right, uv_top])
-		var colors := PackedColorArray([Color.WHITE, Color.WHITE, Color.WHITE, Color.WHITE])
-		draw_polygon(pts, colors, uvs, tex)
-	else:
+		var fc := Color(1, 1, 1, tex_fade)
+		draw_polygon(pts, PackedColorArray([fc, fc, fc, fc]), uvs, tex)
+	elif tex_fade <= 0.005 and tex == null:
 		_poly(PackedVector2Array([NW, NE, SE, SW]), Color("#cdbb8f"))
 	# 坊名标签已移入顶层绘制层 scenes/fang_labels.gd（World/FangLabels），保证不被遮挡。
 	# 本节点只负责坊体/远景色框。

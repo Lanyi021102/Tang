@@ -599,7 +599,8 @@ func _gui_input(event: InputEvent) -> void:
 				_pressed_key = key
 				queue_redraw()
 			elif ENTER_RECT.has_point(pos):
-				SceneTransition.goto_scene(MAP_SCENE)
+				# 进入长安：暗到青绿墨色（与地图入场「舆图展开」墨幕同色），无缝衔接
+				SceneTransition.goto_scene(MAP_SCENE, Color("#0a1512"))
 		else:
 			if _pressed_key != "":
 				if key == _pressed_key:

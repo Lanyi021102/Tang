@@ -93,6 +93,7 @@ const EW_FANG_NAMES := [
 var font_song: Font
 var font_hei: Font
 var font_qiji: Font
+var font_times: Font
 var fang_tag_tex: Texture2D
 var btn_frame_tex: Texture2D
 var clock_tex: Texture2D
@@ -135,6 +136,10 @@ var _timeline: Array = []
 var _clock_open := false
 var _hist_open := false
 var _hist_scroll := 0.0
+var _hist_anim := 0.0          # 大事记面板从下到上滑入动画：0=收起, 1=展开
+var _hist_anim_target := 0.0
+var _hist_selected := -1       # 当前展开细节的大事记索引（-1=无）
+var _hist_detail_anim := 0.0   # 细节框往下展开的动画：0=收起, 1=展开
 var _year_anim := false
 var _year_anim_t := 0.0
 var _year_to := 740
@@ -171,6 +176,8 @@ var _panel_raw := 1.0
 var _panel_anim_t := 1.0
 var _panel_opening := true
 var _knowledge_card_back := false
+var _card_flip_anim := 0.0    # 建筑知识卡翻转动画：0=正面, 1=反面（cos 翻转）
+var _card_flip_target := 0.0
 var _chat_scroll := 0.0
 var _groups: Array = []
 var _pending_group := -1
@@ -253,6 +260,11 @@ func timeline_toggle_rect() -> Rect2:
 func toggle_timeline() -> void:
 	_timeline_collapsed = not _timeline_collapsed
 	_timeline_anim_target = 0.0 if _timeline_collapsed else 1.0
+	# 收起时间轴时同步关闭大事记面板及其细节介绍
+	if _timeline_collapsed:
+		_hist_open = false
+		_hist_anim_target = 0.0
+		_hist_selected = -1
 	if _ui:
 		_ui.queue_redraw()
 # 收起/展开切换按钮区域（左下角）
@@ -291,11 +303,10 @@ func _sync_hud_guards() -> void:
 			btn.visible = show
 			if btn is CanvasItem:
 				btn.modulate.a = clampf(le, 0.0, 1.0)
-	# 时间轴收起：底部深色带随动画收窄/展开，并淡出对应守卫条
+	# 时间轴收起：底部改为渐变绘制（见 ui_overlay，隐藏实色块避免突兀）
 	var bottom_band = hud.get_node_or_null("BottomOpaqueBand")
 	if bottom_band:
-		var e := _ease_in_out_cubic(clampf(_timeline_anim, 0.0, 1.0))
-		bottom_band.offset_top = lerpf(690.0, 602.0, e)
+		bottom_band.visible = false
 	var show_g := _timeline_anim > 0.05
 	for n in ["BottomUpperGuard", "BottomLeftGuard", "BottomRightGuard", "BottomLowerGuard"]:
 		var g = hud.get_node_or_null(n)
@@ -371,24 +382,31 @@ func _snap_far_entry() -> void:
 		_ui.queue_redraw()
 
 func _setup_fonts() -> void:
-	var kf := SystemFont.new()
-	kf.font_names = PackedStringArray(["QIJIFALLBACK", "Kaiti SC", "Kaiti", "STKaiti", "KaiTi", "Songti SC", "STHeiti", "PingFang SC"])
-	kf.allow_system_fallback = true
-	font_song = kf
-	font_hei = kf
-	# 项目内嵌 qiji-fallback.ttf（坊名小标签/左栏按钮专用字体）
-	font_qiji = kf
+	# 主字体：英文/数字用 Times New Roman，中文回退到 qiji-fallback（同近景/中景/远景按钮字体）
 	var qiji_path := "res://assets/fonts/qiji-fallback.ttf"
+	var qiji_ff := FontFile.new()
 	if ResourceLoader.exists(qiji_path):
-		var ff := FontFile.new()
-		if ff.load_dynamic_font(qiji_path) == OK:
-			font_qiji = ff
+		if qiji_ff.load_dynamic_font(qiji_path) != OK:
+			qiji_ff = FontFile.new()
+	var base := SystemFont.new()
+	base.font_names = PackedStringArray(["Times New Roman", "Times", "Georgia"])
+	base.allow_system_fallback = true
+	if qiji_ff != null and qiji_ff.get_data() != PackedByteArray():
+		base.fallbacks = [qiji_ff]
+	font_song = base
+	font_hei = base
+	font_qiji = qiji_ff
+	# 时间轴/大事记的公元年份数字用 Times New Roman
+	var tf := SystemFont.new()
+	tf.font_names = PackedStringArray(["Times New Roman", "Times", "Georgia", "STIX Two Text", "QIJIFALLBACK"])
+	tf.allow_system_fallback = true
+	font_times = tf
 	# 新美术素材：坊名标签底图 / 左栏按钮框 / 时钟贴图
 	fang_tag_tex = load("res://assets/ui/fang_label_tag.png") if ResourceLoader.exists("res://assets/ui/fang_label_tag.png") else null
 	btn_frame_tex = load("res://assets/ui/btn_frame.png") if ResourceLoader.exists("res://assets/ui/btn_frame.png") else null
 	clock_tex = load("res://assets/ui/clock.png") if ResourceLoader.exists("res://assets/ui/clock.png") else null
 	# 右上角时钟：表盘 + 指针（指针黑底在绘制层转透明；同一指针素材复制为分针/时针）
-	dial_tex = load("res://assets/ui/dial_face.png") if ResourceLoader.exists("res://assets/ui/dial_face.png") else clock_tex
+	dial_tex = clock_tex  # 时钟使用 clock.png（而非 dial_face.png）
 	hand_tex = _key_out_black("res://assets/ui/hand_needle.png") if ResourceLoader.exists("res://assets/ui/hand_needle.png") else null
 
 # 把黑底 PNG 转成透明底纹理（避免叠加黑色方块）。阈值：RGB 均低于阈值视为背景。
@@ -1015,6 +1033,21 @@ func _update_ui_anims(delta: float) -> void:
 		_clock_popup_anim = lerpf(_clock_popup_anim, _clock_popup_anim_target, delta * 8.0)
 		if _ui:
 			_ui.queue_redraw()
+	if absf(_hist_anim - _hist_anim_target) > 0.0005:
+		_hist_anim = lerpf(_hist_anim, _hist_anim_target, delta * 7.0)
+		if _ui:
+			_ui.queue_redraw()
+	if _hist_anim <= 0.02 and _hist_selected >= 0:
+		_hist_selected = -1
+		_hist_detail_anim = 0.0
+	if absf(_hist_detail_anim - (1.0 if _hist_selected >= 0 else 0.0)) > 0.0005:
+		_hist_detail_anim = lerpf(_hist_detail_anim, (1.0 if _hist_selected >= 0 else 0.0), delta * 8.0)
+		if _ui:
+			_ui.queue_redraw()
+	if absf(_card_flip_anim - _card_flip_target) > 0.0005:
+		_card_flip_anim = lerpf(_card_flip_anim, _card_flip_target, delta * 9.0)
+		if _ui:
+			_ui.queue_redraw()
 	if absf(_outline_progress - _outline_target) > 0.0005:
 		_outline_progress = lerpf(_outline_progress, _outline_target, delta * 6.0)
 		_refresh_outline_layer()
@@ -1178,13 +1211,23 @@ func hist_popup_rect() -> Rect2:
 
 func hist_event_rect(i: int) -> Rect2:
 	var pr := hist_popup_rect()
-	return Rect2(pr.position.x + 16.0, pr.position.y + 56.0 + float(i) * 44.0 - _hist_scroll, pr.size.x - 32.0, 40.0)
+	# 展开的细节框会把其后的行往下推（回流），避免遮住下方内容
+	var dy := 0.0
+	if _hist_selected >= 0 and i > _hist_selected:
+		dy = _hist_detail_shift()
+	return Rect2(pr.position.x + 16.0, pr.position.y + 56.0 + float(i) * 52.0 - _hist_scroll + dy, pr.size.x - 32.0, 48.0)
+
+# 展开细节框对下方行的下推量（随非线性动画同步推进）
+func _hist_detail_shift() -> float:
+	if _hist_selected < 0:
+		return 0.0
+	return _ease_in_out_cubic(clampf(_hist_detail_anim, 0.0, 1.0)) * 74.0
 
 # 大事记列表最大滚动量（保证最后一项不滚出可视区）
 func hist_max_scroll() -> float:
 	var pr := hist_popup_rect()
 	var list_h := pr.size.y - 56.0 - 12.0
-	var content_h := float(_timeline.size()) * 44.0
+	var content_h := float(_timeline.size()) * 52.0 + _hist_detail_shift()
 	return maxf(0.0, content_h - list_h)
 
 # 时间轴某事件点在屏幕上的位置（与 ui_overlay._draw_hist_timeline 的 bar 计算一致）
@@ -1697,16 +1740,28 @@ func _handle_click(screen_pos: Vector2) -> void:
 		_clock_popup_anim = 0.0
 		_clock_popup_anim_target = 1.0
 		_hist_open = false
+		_hist_anim_target = 0.0
+		_hist_selected = -1
 		_ui.queue_redraw()
 		return
 	if _hist_open:
-		_hist_open = false
-		_ui.queue_redraw()
 		if hist_popup_rect().has_point(ui_pos):
 			for i in range(_timeline.size()):
 				if hist_event_rect(i).has_point(ui_pos):
+					# 点击事件：跳转到该年 + 展开/收起细节
 					_jump_to_year(int(_timeline[i]["year"]))
+					if _hist_selected == i:
+						_hist_selected = -1  # 点击同一事件：收起
+					else:
+						_hist_selected = i
+						_hist_detail_anim = 0.0  # 换事件时重启打开动画（上一个自然滑出）
+					_ui.queue_redraw()
 					return
+			return
+		_hist_open = false
+		_hist_anim_target = 0.0
+		_hist_selected = -1   # 关闭时细节框随之反向收起
+		_ui.queue_redraw()
 		return
 	if _codex_open:
 		if codex_panel_rect().has_point(ui_pos):
@@ -1741,15 +1796,17 @@ func _handle_click(screen_pos: Vector2) -> void:
 	if HIST_TIMELINE_RECT.has_point(ui_pos):
 		if _timeline_collapsed:
 			return
-		# 点击时间轴：先打开大事记卡片，再按事件点滚动定位并跳转年份
+		# 点击时间轴：打开长安城大事记（从下到上非线性滑入）
 		_hist_open = true
+		_hist_anim = 0.0
+		_hist_anim_target = 1.0
+		_hist_selected = -1
+		_hist_detail_anim = 0.0
 		var ev_idx := timeline_event_at_x(ui_pos.x)
 		if ev_idx >= 0:
-			# 点击具体大事记点：滚动定位 + 年份动画跳转（时钟/日月实时流转 + 大圆滑动）
 			_hist_scroll = maxf(0.0, float(ev_idx) * 44.0 - 6.0)
-			_jump_to_year(int(_timeline[ev_idx]["year"]))
-			return
-		_hist_scroll = 0.0
+		else:
+			_hist_scroll = 0.0
 		_ui.queue_redraw()
 		return
 	if _is_blocked_screen_ui_band(ui_pos):
@@ -1766,6 +1823,7 @@ func _handle_click(screen_pos: Vector2) -> void:
 			return
 		if BUILDING_PANEL_RECT.has_point(ui_pos):
 			_knowledge_card_back = not _knowledge_card_back
+			_card_flip_target = 1.0 if _knowledge_card_back else 0.0
 			_ui.queue_redraw()
 			return
 	var sgi := _speaking_group_at(screen_pos)
@@ -2178,6 +2236,8 @@ func _select(p: Dictionary) -> void:
 	_panel_anim_t = 0.0
 	_panel_opening = true
 	_knowledge_card_back = false
+	_card_flip_anim = 0.0
+	_card_flip_target = 0.0
 	_chat_scroll = 0.0
 	_intro_text = ""
 	_intro_visible = 0

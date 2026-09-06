@@ -6,7 +6,7 @@ const INK=Color("#272922")
 const RED=Color("#8f3028")
 const GOLD=Color("#a88a54")
 const MENU=["图鉴","设置","进入长安","坊区档案","营造值","任务"]
-const LEAVE_SCENE="res://scenes/ChangAnCity.tscn"
+const LEAVE_SCENE="res://scenes/IntroScene.tscn"
 const BUTTON_RECTS=[Rect2(1486,72,181,72),Rect2(1684,72,188,72),Rect2(663,838,600,204),Rect2(1510,810,363,66),Rect2(1510,886,168,115),Rect2(1688,886,184,115)]
 var song:Font
 var sans:Font
@@ -18,17 +18,18 @@ var elapsed=0.0
 var toast=""
 var toast_t=0.0
 var settings=false
-var leaving=false
-var trans=0.0
 var bg:Texture2D
 var paper:Texture2D
 var title_art:Texture2D
 var subtitle_art:Texture2D
 var button_tex:Array=[]
+var _scroll_t := -1.0   # 卷轴滚入进度：-1=未开始, 0→1=卷帘从开始菜单盖上来
+var _qiji_font:Font
 
 func _ready():
 	song=_font(["STSong","SimSun","Noto Serif CJK SC"])
 	sans=_font(["Microsoft YaHei","PingFang SC","Noto Sans CJK SC"])
+	_qiji_font=_qiji_composite()
 	bg=load("res://assets/ui/home_full.png")
 	paper=load("res://assets/ui/ink/ui_paper_fiber_tile.png")
 	title_art=load("res://assets/ui/title_changan_works.png") if ResourceLoader.exists("res://assets/ui/title_changan_works.png") else null
@@ -45,12 +46,28 @@ func _font(names:Array)->Font:
 	f.allow_system_fallback=true
 	return f
 
+# 中文用 qiji-fallback，英文/数字用 Times New Roman（与近景/中景/远景按钮的中文一致）
+func _qiji_composite() -> Font:
+	var qiji_path := "res://assets/fonts/qiji-fallback.ttf"
+	var qiji_ff := FontFile.new()
+	if ResourceLoader.exists(qiji_path):
+		if qiji_ff.load_dynamic_font(qiji_path) != OK:
+			qiji_ff = FontFile.new()
+	var base := SystemFont.new()
+	base.font_names = PackedStringArray(["Times New Roman", "Times", "Georgia"])
+	base.allow_system_fallback = true
+	if qiji_ff != null and qiji_ff.get_data() != PackedByteArray():
+		base.fallbacks = [qiji_ff]
+	return base
+
 func _process(d):
 	elapsed+=d; toast_t=maxf(0,toast_t-d)
-	if leaving:
-		trans=minf(1,trans+d/0.65)
-		if trans>=1:
-			SceneTransition.goto_scene(LEAVE_SCENE)
+	if _scroll_t >= 0.0:
+		_scroll_t += d / 0.6
+		if _scroll_t >= 1.0:
+			_scroll_t = 1.0
+			get_tree().change_scene_to_file(LEAVE_SCENE)
+			return
 	queue_redraw()
 
 func _draw():
@@ -62,7 +79,7 @@ func _draw():
 	_draw_menu()
 	if settings: _draw_settings()
 	if toast_t>0: _draw_toast()
-	if leaving: _draw_transition()
+	if _scroll_t >= 0.0: _draw_scroll()
 
 func _draw_map():
 	pass
@@ -109,11 +126,31 @@ func _draw_toast():
 	var r=Rect2(690,852,540,62); draw_rect(r,Color(0.06,0.065,0.055,.96)); draw_rect(r,GOLD,false,2); draw_string(sans,r.position+Vector2(18,40),toast,1,r.size.x-36,20,Color("#e4dac2"))
 
 func _draw_transition():
-	var x=W*ease(trans,-2.0); draw_rect(Rect2(0,0,x,H),Color("#151713")); draw_line(Vector2(x,0),Vector2(x,H),GOLD,4)
-	if trans>.2: draw_string(song,Vector2(760,566),"舆图展开 · 入司理事",1,400,28,Color(0.87,0.8,0.66,minf(1,trans*2)))
+	pass
+
+# 从开始菜单"长出"卷轴：墨色卷帘自左向右盖过菜单，露出「舆图展开·入司理事」（中文 qiji）
+func _draw_scroll():
+	if _scroll_t < 0.0: return
+	var s := clampf(_scroll_t, 0.0, 1.0)
+	var ease := s * s * (3.0 - 2.0 * s)
+	var cx := W * ease
+	draw_rect(Rect2(0,0,cx,H), Color("#0a1512"))
+	draw_line(Vector2(cx,0),Vector2(cx,H),Color(0.79,0.64,0.36,0.9),3.0)
+	draw_line(Vector2(cx+3.0,0),Vector2(cx+3.0,H),Color(0.85,0.72,0.5,0.4),1.0)
+	var ta := clampf((s - 0.3) / 0.5, 0.0, 1.0)
+	if ta > 0.0 and _qiji_font:
+		var cy := H * 0.5
+		_center_text(_qiji_font, "舆 图 展 开", 62.0 * (H/720.0), Color(0.95,0.9,0.81,ta), Vector2(W*0.5, cy))
+		_center_text(_qiji_font, "入司理事", 34.0 * (H/720.0), Color(0.87,0.8,0.65,ta), Vector2(W*0.5, cy+46.0*(H/720.0)))
+
+func _center_text(font:Font, text:String, size:float, color:Color, center:Vector2):
+	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	var asc := font.get_ascent(size)
+	var desc := font.get_descent(size)
+	draw_string(font, Vector2(center.x - w*0.5, center.y + (asc-desc)*0.5), text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
 
 func _gui_input(e):
-	if leaving:return
+	if _scroll_t >= 0.0: return
 	if e is InputEventMouseMotion: hover=_at(_p(e.position)); queue_redraw()
 	elif e is InputEventMouseButton and e.button_index==MOUSE_BUTTON_LEFT and not e.pressed:
 		var p=_p(e.position)
@@ -134,7 +171,7 @@ func _gui_input(e):
 func _activate(i):
 	if i==0: _toast("图鉴将在后续版本开放。")
 	elif i==1: settings=true
-	elif i==2: leaving=true
+	elif i==2: _scroll_t = 0.0  # 触发卷轴从开始菜单滚入
 	elif i==3: _toast("坊区档案正在整理中。")
 	elif i==4: _toast("营造值将在营造方案建立后更新。")
 	elif i==5: _toast("当前尚无已领取任务。")
