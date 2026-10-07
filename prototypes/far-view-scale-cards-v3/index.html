@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>长安城远景知识卡片 V3 · 极简尺度版</title>
+<style>
+:root{--bg:#06140b;--green:#08291c;--gold:#d2a13e;--gold2:#98702f;--paper:#e0ca8c;--muted:#93a18d}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;padding:34px 22px 54px;color:var(--paper);font-family:FangSong,STFangsong,"Songti SC",serif;background:radial-gradient(ellipse at 50% 20%,#173827 0,#081b11 48%,#041008 100%)}
+body:before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.11;background-image:radial-gradient(#d2a13e .7px,transparent .8px);background-size:7px 7px}
+header{max-width:1040px;margin:auto;display:flex;justify-content:space-between;align-items:end;gap:24px}.kicker{font-size:12px;color:var(--gold);letter-spacing:.28em}h1{margin:7px 0 0;font:400 31px STKaiti,KaiTi,"Kaiti SC",serif;color:var(--gold);letter-spacing:.13em}.note{margin:0;color:var(--muted);font-size:12px}
+.filters{max-width:1040px;margin:24px auto 20px;display:flex;justify-content:center;gap:8px}.filters button{font:inherit;border:1px solid #d2a13e66;border-radius:999px;padding:8px 17px;background:#0a281b;color:var(--paper);cursor:pointer}.filters button.active{background:var(--gold);color:#07170d}
+.grid{max-width:1040px;margin:auto;display:grid;grid-template-columns:repeat(3,minmax(220px,1fr));gap:17px}.card{position:relative;min-height:205px;border:0;border-radius:24px;padding:25px 22px;overflow:hidden;text-align:left;color:inherit;font:inherit;cursor:pointer;background:radial-gradient(circle at 83% 10%,#5e795e42,transparent 29%),linear-gradient(160deg,#06291c,#0a3021 60%,#8e6934 145%);box-shadow:0 18px 44px #0008,inset 0 0 0 1px #d2a13e44;transition:.24s ease}.card:before{content:"";position:absolute;inset:0;opacity:.12;background:radial-gradient(circle at 18% 28%,transparent 0 5px,#d2a13e 6px 7px,transparent 8px);background-size:83px 71px}.card:hover,.card:focus-visible{transform:translateY(-5px);outline:none;box-shadow:0 25px 52px #000a,inset 0 0 0 1px #d2a13e88}.card.selected{box-shadow:0 25px 52px #000a,0 0 0 2px var(--gold)}
+.entity-name,.scale{position:relative;z-index:1}.entity-name{font:400 clamp(28px,3vw,39px)/1.15 STKaiti,KaiTi,"Kaiti SC",serif;color:var(--gold);letter-spacing:.08em;text-shadow:0 5px 12px #0008}.divider{position:relative;z-index:1;width:38px;height:1px;margin:22px 0 17px;background:var(--gold)}.scale-label{font-size:10px;color:var(--gold2);letter-spacing:.18em}.scale-value{margin-top:6px;font-size:17px;color:var(--paper);letter-spacing:.04em}.scale-value.missing{color:var(--muted)}.seal{position:absolute;right:21px;bottom:19px;z-index:1;display:grid;place-items:center;width:39px;height:39px;border:1px solid var(--gold);color:var(--gold);font:22px STKaiti,KaiTi,serif}.status{max-width:1040px;min-height:26px;margin:18px auto 0;text-align:center;color:var(--gold2);font-size:12px}.source{text-align:center;color:#93a18d;font-size:10px;letter-spacing:.08em}
+@media(max-width:780px){header{display:block}.note{margin-top:10px}.grid{grid-template-columns:repeat(2,minmax(200px,1fr))}}@media(max-width:520px){body{padding:24px 15px}.grid{grid-template-columns:1fr}.card{min-height:190px}}
+</style>
+</head>
+<body>
+<header><div><div class="kicker">长安城 · 远景知识图鉴</div><h1>极简尺度卡片 V3</h1></div><p class="note">仅保留名称与尺度 · 108 坊 / 40 路</p></header>
+<nav class="filters" aria-label="实体类型筛选"><button class="active" data-filter="all">全部</button><button data-filter="Fang">里坊</button><button data-filter="Road">道路</button></nav>
+<main class="grid" id="grid"></main><div class="status" id="status" aria-live="polite"></div><div class="source">尺度数据：联合总表 · 审核数据</div>
+<script src="cards-data.js"></script>
+<script>
+const entities=window.CHANGAN_SCALE_CARDS||[];
+let filter='all',selected='';const grid=document.querySelector('#grid'),status=document.querySelector('#status');
+function render(){const list=entities.filter(x=>filter==='all'||x.type===filter);grid.innerHTML=list.map(x=>`<button class="card ${selected===x.id?'selected':''}" data-id="${x.id}" aria-label="选择${x.name}"><div class="entity-name">${x.name}</div><div class="divider"></div><div class="scale"><div class="scale-label">尺度 SCALE</div><div class="scale-value ${x.scale==='尺度暂无'?'missing':''}">${x.scale}</div></div><div class="seal">${x.symbol}</div></button>`).join('');status.textContent=`当前显示 ${list.length} 张卡片`}
+document.querySelector('.filters').onclick=e=>{const b=e.target.closest('[data-filter]');if(!b)return;filter=b.dataset.filter;document.querySelectorAll('[data-filter]').forEach(x=>x.classList.toggle('active',x===b));selected='';render()};
+grid.onclick=e=>{const card=e.target.closest('[data-id]');if(!card)return;selected=card.dataset.id;const item=entities.find(x=>x.id===selected);render();status.textContent=`已选择：${item.name} · ${item.scale}`};render();
+</script>
+</body>
+</html>
