@@ -107,6 +107,7 @@ var _fang_tex_map: Dictionary = {}  # 坊名 -> 贴图（按名精确匹配 + �
 var _camera: Camera2D
 
 var _selected: Dictionary = {}
+var _far_selected_entity: Dictionary = {}
 var _selected_fang := Vector2(-1, -1)
 var _hover_fang := Vector2(-1, -1)
 # 皇宫（宫城+皇城整体）步坐标命中范围，由 _build_world 皇宫节点创建时写入；无效=(-1,-1)
@@ -176,6 +177,8 @@ var _panel_raw := 1.0
 var _panel_anim_t := 1.0
 var _panel_opening := true
 var _knowledge_card_back := false
+var _panel_page := 1
+var _panel_mini_map: Dictionary = {}
 var _card_flip_anim := 0.0    # 建筑知识卡翻转动画：0=正面, 1=反面（cos 翻转）
 var _card_flip_target := 0.0
 var _chat_scroll := 0.0
@@ -260,7 +263,7 @@ var _prev_fang := Vector2(-1, -1)
 # 时间轴收起/展开切换按钮区域（与左侧功能按钮同风格横条；收起钮贴底、展开钮在时间轴上方中央）
 func timeline_toggle_rect() -> Rect2:
 	if _timeline_collapsed:
-		return Rect2(580.0, 686.0, 120.0, 34.0)
+		return Rect2(580.0, 676.0, 120.0, 34.0)
 	return Rect2(580.0, 610.0, 120.0, 34.0)
 
 func toggle_timeline() -> void:
@@ -427,6 +430,7 @@ func _sync_from_data() -> void:
 	_kepu_kb = DataManager.kepu_kb
 	_timeline = DataManager.timeline
 	_cards = DataManager.knowledge_cards
+	_far_cards = DataManager.far_scale_cards
 	_spatial_info = DataManager.spatial_info
 	_cfg = DataManager.llm_config
 	if _kepu_kb.is_empty():
@@ -911,6 +915,18 @@ func _redraw_world() -> void:
 func _build_ui() -> void:
 	_ui = get_node("UI/Overlay")
 	_ui.map = self
+	var entity_fields = preload("res://scenes/entity_card_fields.gd").new()
+	entity_fields.name = "EntityCardFields"
+	entity_fields.host = self
+	_ui.add_child(entity_fields)
+	var graph_panel = preload("res://scenes/graph_card_panel.gd").new()
+	graph_panel.name = "GraphCardPanel"
+	graph_panel.host = self
+	_ui.add_child(graph_panel)
+	var card_navigation = preload("res://scenes/card_navigation.gd").new()
+	card_navigation.name = "CardNavigation"
+	card_navigation.host = self
+	_ui.add_child(card_navigation)
 	_apply_ui_canvas_layout.call_deferred()
 	get_viewport().size_changed.connect(_apply_ui_canvas_layout)
 
@@ -948,6 +964,8 @@ func _set_zoom(idx: int, snap: bool = false) -> void:
 	if _far_card_open and _zoom_idx != 0:
 		_far_card_open = false
 		_far_card = {}
+	if _zoom_idx == 0 and not _selected.is_empty():
+		_select(_selected.duplicate())
 	_free_pan = false
 	var _view_mode := "far" if _zoom_idx == 0 else ("near" if _zoom_idx == ZOOM_LEVELS.size() - 1 else "mid")
 	GameManager.set_view_mode(_view_mode)
@@ -1237,6 +1255,16 @@ func group_chat_close_rect() -> Rect2:
 func building_close_rect() -> Rect2:
 	return Rect2(BUILDING_PANEL_RECT.end.x - 32.0, BUILDING_PANEL_RECT.position.y + 18.0, 18.0, 18.0)
 
+func building_page_rect(index: int) -> Rect2:
+	return Rect2(BUILDING_PANEL_RECT.position.x + 22.0 + index * 88.0, BUILDING_PANEL_RECT.end.y - 58.0, 82.0, 30.0)
+
+func set_building_page(page: int) -> void:
+	_panel_page = clampi(page, 1, 4)
+	_knowledge_card_back = _panel_page == 2
+	_card_flip_anim = 0.0
+	_card_flip_target = 0.0
+	_ui.queue_redraw()
+
 func followup_button_rect(i: int) -> Rect2:
 	var bx := BUILDING_PANEL_RECT.position.x + 14.0
 	var by := BUILDING_PANEL_RECT.end.y - 56.0
@@ -1398,7 +1426,7 @@ func codex_collected_list(cat: int) -> Array:
 
 # ==================== far-view knowledge cards ====================
 func far_card_panel_rect() -> Rect2:
-	return BUILDING_PANEL_RECT
+	return Rect2(BUILDING_PANEL_RECT.position, Vector2(BUILDING_PANEL_RECT.size.x, 240.0))
 
 func far_card_close_rect() -> Rect2:
 	var pr := far_card_panel_rect()
@@ -1409,6 +1437,23 @@ func far_card_minimap_rect() -> Rect2:
 	return Rect2(pr.position.x + 20.0, pr.position.y + 148.0, pr.size.x - 40.0, 180.0)
 
 func _find_far_card(entity: Dictionary) -> Dictionary:
+	# V3 uses audited scale text, never dimensions inferred from rendering geometry.
+	var entity_id := str(entity.get("key", entity.get("id", "")))
+	var entity_name := str(entity.get("name", ""))
+	for card in _far_cards:
+		if str(card.get("id", "")) == entity_id:
+			return card
+	for card in _far_cards:
+		if str(card.get("name", "")) == entity_name and entity_name != "":
+			return card
+	var entity_type := str(entity.get("type", ""))
+	if entity_id.begins_with("FANG-") or entity_type == "Fang":
+		return {"id": entity_id, "name": entity_name, "type": "Fang", "scale": "尺度暂无", "symbol": "坊"}
+	if entity_id.begins_with("STREET-") or entity_type == "Road":
+		return {"id": entity_id, "name": entity_name, "type": "Road", "scale": "尺度暂无", "symbol": "街"}
+	return {}
+
+func _find_legacy_far_card(entity: Dictionary) -> Dictionary:
 	# 1. Check pre-built cards first
 	var ename := String(entity.get("name", ""))
 	for card in _far_cards:
@@ -1439,6 +1484,7 @@ func _find_far_card(entity: Dictionary) -> Dictionary:
 
 func _close_far_card() -> void:
 	_far_card_open = false
+	_far_selected_entity = {}
 	_far_card = {}
 	if _ui:
 		_ui.queue_redraw()
@@ -1449,7 +1495,7 @@ func _build_far_card_for_fang(col: int, row: int) -> Dictionary:
 	var ew_size := int(float(NS_FANG_WIDTHS[col])) if col < NS_FANG_WIDTHS.size() else 0
 	var ns_size := int(float(EW_FANG_DEPTHS[row])) if row < EW_FANG_DEPTHS.size() else 0
 	var n_road: String = EW_STREET_NAMES[row] if row < EW_STREET_NAMES.size() else ""
-	var e_road: String = NS_STREET_NAMES[col] if col < NS_STREET_NAMES.size() else ""
+	var e_road: String = NS_STREET_NAMES[col + 1] if col + 1 < NS_STREET_NAMES.size() else ""
 	var where := ""
 	if e_road != "":
 		where = e_road + "东第" + str(col + 1) + "列"
@@ -1531,19 +1577,20 @@ func _build_far_card_for_road(dir: String, idx: int) -> Dictionary:
 
 func _build_fang_minimap(col: int, row: int) -> Dictionary:
 	# 3x3 grid: center = target fang, neighbors = adjacent fangs
-	var sc: int = clampi(col - 1, 0, 9)
-	var ec: int = clampi(col + 1, 0, 9)
-	var nr: int = clampi(row - 1, 0, 12)
-	var sr: int = clampi(row + 1, 0, 12)
+	var sc: int = col - 1
+	var ec: int = col + 1
+	var nr: int = row - 1
+	var sr: int = row + 1
 	var blocks: Array = []
 	for rr in range(nr, sr + 1):
 		for cc in range(sc, ec + 1):
+			if cc < 0 or cc > 9 or rr < 0 or rr > 12: continue
 			var fn := _fang_name_of(cc, rr)
 			var is_focus := (cc == col and rr == row)
 			var bx: float = float(cc - sc) / 3.0
 			var by: float = float(rr - nr) / 3.0
 			blocks.append({
-				"rect": [bx + 0.02, by + 0.02, 0.29, 0.29],
+				"rect": [bx + 0.035, by + 0.035, 0.255, 0.255],
 				"focus": is_focus,
 				"alt": not is_focus,
 				"label": fn if fn != "里坊" else "",
@@ -1552,16 +1599,21 @@ func _build_fang_minimap(col: int, row: int) -> Dictionary:
 	var routes: Array = []
 	# north road
 	if row > 0 and nr == row - 1:
-		routes.append({"dir": "h", "pos": 0.33, "width": 0.008})
+		routes.append({"dir": "h", "pos": 0.33, "width": 0.008, "name": EW_STREET_NAMES[row] if row < EW_STREET_NAMES.size() else ""})
 	# south road
 	if row < 12 and sr == row + 1:
-		routes.append({"dir": "h", "pos": 0.66, "width": 0.008})
+		routes.append({"dir": "h", "pos": 0.66, "width": 0.008, "name": EW_STREET_NAMES[row + 1] if row + 1 < EW_STREET_NAMES.size() else ""})
 	# east road
 	if col < 9 and ec == col + 1:
-		routes.append({"dir": "v", "pos": 0.66, "width": 0.008})
+		routes.append({"dir": "v", "pos": 0.66, "width": 0.008, "name": NS_STREET_NAMES[col + 1] if col + 1 < NS_STREET_NAMES.size() else ""})
 	# west road
 	if col > 0 and sc == col - 1:
-		routes.append({"dir": "v", "pos": 0.33, "width": 0.008})
+		routes.append({"dir": "v", "pos": 0.33, "width": 0.008, "name": NS_STREET_NAMES[col] if col < NS_STREET_NAMES.size() else ""})
+	# 边缘坊外侧不再虚构相邻坊，以独立城墙符号表达城市边界。
+	if col == 0: routes.append({"dir": "v", "pos": 0.33, "width": 0.03, "name": "外郭城墙", "wall": true})
+	if col == 9: routes.append({"dir": "v", "pos": 0.66, "width": 0.03, "name": "外郭城墙", "wall": true})
+	if row == 0: routes.append({"dir": "h", "pos": 0.33, "width": 0.03, "name": "外郭城墙", "wall": true})
+	if row == 12: routes.append({"dir": "h", "pos": 0.66, "width": 0.03, "name": "外郭城墙", "wall": true})
 	return {"blocks": blocks, "routes": routes, "arrows": []}
 
 func _build_road_minimap(dir: String, idx: int) -> Dictionary:
@@ -1969,6 +2021,10 @@ func _panel_has_point(p: Vector2) -> bool:
 func _handle_click(screen_pos: Vector2) -> void:
 	# screen_pos 为视口坐标；UI 判定统一换算到 1280x720 设计系，世界点击保留视口坐标
 	var ui_pos := screen_to_ui(screen_pos)
+	if timeline_toggle_rect().has_point(ui_pos):
+		toggle_timeline()
+		_ui._sync_timeline_toggle_btn()
+		return
 	if left_toggle_rect().has_point(ui_pos):
 		toggle_left_bar()
 		return
@@ -2031,7 +2087,11 @@ func _handle_click(screen_pos: Vector2) -> void:
 			for i in range(5):
 				if codex_type_rect(i).has_point(ui_pos):
 					_card_type_idx = i
+					_card_page = 1
 					_card_focus = 0
+					_card_focus_anim = 0.0
+					_codex_drag_focus = 0.0
+					_codex_dragging = false
 					_codex_scroll = 0.0
 					_ui.queue_redraw()
 					return
@@ -2049,7 +2109,7 @@ func _handle_click(screen_pos: Vector2) -> void:
 		_codex_open = false
 		_ui.queue_redraw()
 		return
-	if HIST_TIMELINE_RECT.has_point(ui_pos):
+	if HIST_TIMELINE_RECT.has_point(ui_pos) and not _ui_panel_at(ui_pos):
 		if _timeline_collapsed:
 			return
 		# 点击时间轴：打开长安城大事记（从下到上非线性滑入）
@@ -2074,7 +2134,7 @@ func _handle_click(screen_pos: Vector2) -> void:
 			_close_far_card()
 			return
 		return
-	if _is_blocked_screen_ui_band(ui_pos):
+	if _is_blocked_screen_ui_band(ui_pos) and not _ui_panel_at(ui_pos):
 		return
 	if _group_chat_open and group_chat_close_rect().has_point(ui_pos):
 		_group_chat_open = false
@@ -2087,9 +2147,11 @@ func _handle_click(screen_pos: Vector2) -> void:
 			_deselect()
 			return
 		if BUILDING_PANEL_RECT.has_point(ui_pos):
-			_knowledge_card_back = not _knowledge_card_back
-			_card_flip_target = 1.0 if _knowledge_card_back else 0.0
-			_ui.queue_redraw()
+			for page_index in range(4):
+				if building_page_rect(page_index).has_point(ui_pos):
+					set_building_page(page_index + 1)
+					return
+			set_building_page(_panel_page % 4 + 1)
 			return
 	var sgi := _speaking_group_at(screen_pos)
 	if sgi >= 0:
@@ -2198,7 +2260,7 @@ func _fang_data(c: float, r: float) -> Dictionary:
 	var ew_size := int(float(NS_FANG_WIDTHS[ci]))    # 东西尺寸
 	var ns_size := int(float(EW_FANG_DEPTHS[si]))    # 南北尺寸
 	var ew_street_name: String = EW_STREET_NAMES[si] if si < EW_STREET_NAMES.size() else ""
-	var ns_street_name: String = NS_STREET_NAMES[ci] if ci < NS_STREET_NAMES.size() else ""
+	var ns_street_name: String = NS_STREET_NAMES[ci + 1] if ci + 1 < NS_STREET_NAMES.size() else ""
 	return {
 		"key": "FANG-%d-%d" % [ci, si],
 		"name": fname,
@@ -2491,12 +2553,15 @@ func _hit_test(pos: Vector2) -> Dictionary:
 	return {}
 func _select(p: Dictionary) -> void:
 	# far-view: show simplified card if entity matches
-	if _zoom_idx == 0 and not _far_cards.is_empty():
+	if _zoom_idx == 0:
 		var fc := _find_far_card(p)
 		if not fc.is_empty():
+			_far_selected_entity = p.duplicate()
 			_far_card = fc
 			_far_card_open = true
 			_selected = {}
+			_follow_group = -1
+			_group_chat_open = false
 			_panel_anim_t = 0.0
 			_panel_opening = false
 			if _ui:
@@ -2508,6 +2573,8 @@ func _select(p: Dictionary) -> void:
 	_follow_group = -1
 	_group_chat_open = false
 	_selected = p
+	_panel_page = 1
+	_panel_mini_map = _build_panel_minimap(p)
 	_local_text = _build_local_text(p)
 	_followups = _followup_questions(p)
 	_error = ""
@@ -2623,7 +2690,39 @@ func _request_llm() -> void:
 		_typing_visible = 0
 	_redraw_world()
 	_ui.queue_redraw()
-	NetworkManager.request_chat(_messages, 0.7, 500)
+	if bool(DataManager.llm_config.get("chat_via_backend", false)):
+		var graph_identity: Dictionary = preload("res://autoload/GraphClient.gd").resolve_entity(_selected, DataManager.graph_entities)
+		if graph_identity.is_empty():
+			_loading = false
+			_typing = false
+			_typing_intro = false
+			_error = "当前地点无法唯一对应知识图谱实体，请核对名称和编号。"
+			_ui.queue_redraw()
+			return
+		_loading = true
+		_error = ""
+		var query := ""
+		if _pending_intro:
+			query = "请根据知识图谱和已审核史料，用120至160字介绍%s，并生成两个适合继续了解的简短问题。" % str(_selected.get("name", "当前地点"))
+		else:
+			for i in range(_messages.size() - 1, -1, -1):
+				if str(_messages[i].get("role", "")) == "user":
+					query = str(_messages[i].get("content", ""))
+					break
+		var previous_questions := PackedStringArray()
+		for item in _followups: previous_questions.append(str(item.get("q", "")))
+		for item in _chat:
+			if str(item.get("role", "")) == "user": previous_questions.append(str(item.get("text", "")))
+		query = "当前地点：%s。\n本轮问题：%s\n请通过RAG检索当前实体相关资料，生成通俗易懂的科普回答。正文控制在200字以内，整条回答含推荐问题、标点和引用不得超过300字。每次回答末尾必须按以下格式提出恰好两个新的延伸问题，每个问题含标点最多20字，语义完整简洁：\n适合继续了解的问题：\n1. 问题一\n2. 问题二\n两个问题必须具体关联本轮回答和当前地点，能够继续检索资料；不要输出固定通用问题，不要重复以下已经展示或问过的问题：%s。" % [str(_selected.get("name", "")), query, "；".join(previous_questions)]
+		NetworkManager.request_rag(
+			"building-%s-%d" % [str(_selected.get("key", "point")), Time.get_ticks_msec()],
+			query,
+			str(graph_identity.get("key", "")),
+			{"temperature": 0.3, "max_tokens": 500, "mode": "knowledge"},
+			true
+		)
+	else:
+		NetworkManager.request_chat(_messages, 0.7, 500)
 
 func _build_prompt(p: Dictionary) -> String:
 	var lines := PackedStringArray()
@@ -2664,6 +2763,8 @@ func _on_chat_response(content: String, error: String) -> void:
 	_loading = false
 	if error != "":
 		_error = error
+		_typing = false
+		_typing_intro = false
 		_ui.queue_redraw()
 		return
 	if _pending_group >= 0:
@@ -2674,6 +2775,16 @@ func _on_chat_response(content: String, error: String) -> void:
 		return
 	if content != "":
 		content = content.strip_edges()
+		# 首次介绍和后续回答均使用同一组推荐问题。
+		var followup_marker := content.find("【追问】")
+		if followup_marker >= 0:
+			var questions: Array = []
+			for line in content.substr(followup_marker + "【追问】".length()).split("\n"):
+				var question := line.strip_edges()
+				if question != "": questions.append({"label": question, "q": question})
+				if questions.size() == 2: break
+			if questions.size() == 2: _followups = questions
+			content = content.substr(0, followup_marker).strip_edges()
 		if _pending_intro:
 			var intro := content
 			var qs: Array = []

@@ -618,7 +618,7 @@ func _draw_hist_timeline() -> void:
 	var anim: float = clampf(map._timeline_anim, 0.0, 1.0)
 	var e: float = map._ease_in_out_cubic(anim)
 	# 收起/展开切换按钮：与左侧功能按钮同风格（按钮框贴图 + qiji 字体横排）
-	var collapsed_r := Rect2(580.0, 686.0, 120.0, 34.0)
+	var collapsed_r := Rect2(580.0, 676.0, 120.0, 34.0)
 	var expanded_r := Rect2(580.0, 610.0, 120.0, 34.0)
 	var k: float = 1.0 - e
 	var tr := Rect2(
@@ -760,6 +760,30 @@ func _draw_far_card_panel() -> void:
 	if card.is_empty():
 		return
 	var pr: Rect2 = map.far_card_panel_rect()
+	var gold := Color("#d2a13e")
+	_round_rect_fill(pr, 24.0, Color("#08291c"))
+	_round_rect_stroke(pr, 24.0, Color("#98702f"), 1.0)
+	_draw_ink_close(map.far_card_close_rect(), 1.0, "far_close")
+	var name := str(card.get("name", ""))
+	var title_size := 36.0
+	while title_size > 16.0 and map.font_song.get_string_size(name, HORIZONTAL_ALIGNMENT_LEFT, -1, int(title_size)).x > pr.size.x - 84.0:
+		title_size -= 1.0
+	_text_left(map.font_song, name, title_size, gold, pr.position + Vector2(24, 68))
+	draw_line(pr.position + Vector2(24, 94), pr.position + Vector2(62, 94), gold, 1.0)
+	_text_left(map.font_hei, "尺度 SCALE", 11.0, Color("#98702f"), pr.position + Vector2(24, 121))
+	var scale_text := str(card.get("scale", "尺度暂无"))
+	var ink := Color("#93a18d") if scale_text == "尺度暂无" else Color("#e0ca8c")
+	_draw_card_text(scale_text, pr.position.x + 24.0, pr.position.y + 137.0, pr.size.x - 100.0, 3, 1.0, ink, 17.0)
+	var seal := Rect2(pr.end - Vector2(62, 62), Vector2(39, 39))
+	draw_rect(seal, gold, false, 1.0)
+	_text_center(map.font_song, str(card.get("symbol", "坊")), 22.0, gold, seal.get_center())
+	_text_left(map.font_hei, "联合总表 · 尺度卡片 V3", 10.0, Color("#93a18d"), pr.position + Vector2(24, 217))
+
+func _draw_legacy_far_card_panel() -> void:
+	var card: Dictionary = map._far_card
+	if card.is_empty():
+		return
+	var pr: Rect2 = map.far_card_panel_rect()
 	var a: float = clampf(map._panel_anim_t, 0.0, 1.0)
 	if a <= 0.01:
 		a = 1.0
@@ -845,12 +869,13 @@ func _draw_far_minimap(r: Rect2, card: Dictionary, a: float) -> void:
 		var rp: float = float(route.get("pos", 0.5))
 		var rw: float = float(route.get("width", 0.008)) * r.size.x
 		if rw < 4.0: rw = 6.0
+		var route_color := Color("#454a46") if bool(route.get("wall", false)) else Color("#d3a343")
 		if rd == "v":
 			var rx := r.position.x + rp * r.size.x
-			draw_rect(Rect2(rx - rw * 0.5, r.position.y, rw, r.size.y), _ca(Color("#d3a343"), a))
+			draw_rect(Rect2(rx - rw * 0.5, r.position.y, rw, r.size.y), _ca(route_color, a))
 		else:
 			var ry := r.position.y + rp * r.size.y
-			draw_rect(Rect2(r.position.x, ry - rw * 0.5, r.size.x, rw), _ca(Color("#d3a343"), a))
+			draw_rect(Rect2(r.position.x, ry - rw * 0.5, r.size.x, rw), _ca(route_color, a))
 	# draw blocks
 	var blocks: Array = mm_data.get("blocks", [])
 	for blk in blocks:
@@ -1050,11 +1075,16 @@ func _draw_panel() -> void:
 	var fs := Vector2(flip_scale_x, 1.0)
 	var fpos := cc2 - Vector2(cc2.x * fs.x, cc2.y * fs.y)
 	draw_set_transform(fpos, 0.0, fs)
-	if flip_prog < 0.5:
+	if map._panel_page == 1:
 		_draw_card_front(p, type, r, a)
-	else:
+	elif map._panel_page == 2:
 		_draw_card_back(p, type, r, a)
+	elif map._panel_page == 3:
+		_draw_card_spatial(p, type, r, a)
+	else:
+		_text_center(map.font_song, "史料与问答", 23.0, _ca(Color("#c99b45"), a), Vector2(r.get_center().x, r.position.y + 65.0))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	# Paging is handled by the native CardNavigation buttons above the content.
 
 func _draw_card_front(p: Dictionary, type: String, r: Rect2, a: float) -> void:
 	var name := String(p.get("name", ""))
@@ -1081,23 +1111,26 @@ func _draw_card_front(p: Dictionary, type: String, r: Rect2, a: float) -> void:
 	var w := r.size.x - 52.0
 	var y := image_rect.end.y + 18.0
 	var desc := String(p.get("description", "暂无简介"))
+	# 地图动态生成的第一页尺寸值使用米；不改实体史料中的原文单位。
+	var point_key := str(p.get("key", ""))
+	if point_key.begins_with("FANG-") or point_key.begins_with("STREET-"):
+		desc = desc.replace("步", "米")
 	_draw_card_text(desc, x, y, w, 3, a, Color("#dfc784"), 15.0)
 	_text_left(map.font_hei, String(p.get("period", "隋—唐")), 12.0, _ca(Color("#c99b45"), a), Vector2(x, r.end.y - 35.0))
-	_text_left(map.font_hei, "长安城知识图鉴 · 点击卡片翻面", 9.0, _ca(Color("#9aaa94"), a), Vector2(x, r.end.y - 19.0))
-	var seal := Rect2(r.end.x - 72.0, r.end.y - 66.0, 46.0, 46.0)
-	draw_rect(seal, _ca(Color("#c99b45"), a), false, 1.0)
-	_text_center(map.font_song, _entity_symbol(type), 23.0, _ca(Color("#c99b45"), a), seal.get_center())
 
 func _draw_card_back(p: Dictionary, type: String, r: Rect2, a: float) -> void:
+	var entity: Dictionary = DataManager.card_entity(p)
+	var use_entity_fields := str(entity.get("type", "")) in ["Fang", "Road"]
 	var x := r.position.x + 20.0
 	var w := r.size.x - 40.0
 	var y := r.position.y + 76.0
-	_text_center(map.font_song, _card_subtitle(p, type), 27.0, _ca(Color("#c99b45"), a), Vector2(r.get_center().x, y + 12.0))
+	_text_center(map.font_song, str(entity.get("name", "")) if use_entity_fields else _card_subtitle(p, type), 27.0, _ca(Color("#c99b45"), a), Vector2(r.get_center().x, y + 12.0))
 	y += 34.0
 	var symbol_rect := Rect2(r.get_center().x - 54.0, y, 108.0, 108.0)
 	draw_circle(symbol_rect.get_center(), 53.0, _ca(Color("#0d3828"), a))
 	draw_arc(symbol_rect.get_center(), 53.0, 0.0, TAU, 48, _ca(Color("#c99b45"), a), 2.0)
 	_text_center(map.font_song, _entity_symbol(type), 46.0, _ca(Color("#c99b45"), a), symbol_rect.get_center())
+	if use_entity_fields: return
 	y = symbol_rect.end.y + 24.0
 	for row in _basic_rows(p, type).slice(0, 4):
 		y = _draw_card_row(String(row[0]), String(row[1]), x, y, w, a)
@@ -1108,7 +1141,7 @@ func _draw_card_back(p: Dictionary, type: String, r: Rect2, a: float) -> void:
 	for line in _relation_lines(p, type):
 		y = _draw_card_relation(String(line), x, y, w, a)
 	y += 6.0
-	_text_right(map.font_hei, "点击卡片返回正面", 12.0, _ca(Color("#9aaa94"), a), Vector2(r.end.x - 26.0, r.end.y - 16.0))
+	_text_right(map.font_hei, "点击卡片查看空间关系", 12.0, _ca(Color("#9aaa94"), a), Vector2(r.end.x - 26.0, r.end.y - 16.0))
 
 
 func _spatial_description(p: Dictionary, type: String) -> String:
@@ -1164,16 +1197,7 @@ func _draw_card_spatial(p: Dictionary, type: String, r: Rect2, a: float) -> void
 	var desc_y := mm_rect.end.y + 16.0
 	var desc_w := r.size.x - 56.0
 	var desc_x := r.position.x + 28.0
-	_draw_card_text(desc_text, desc_x, desc_y, desc_w, 5, a, Color("#c8c6ae"), 12.0)
-	# Bottom hint
-	_text_center(map.font_hei, "点击卡片切换页面", 9.0, _ca(Color("#9aaa94"), a), Vector2(r.get_center().x, r.end.y - 18.0))
-	# Page indicator
-	var indicator_y := r.end.y - 40.0
-	for i in range(3):
-		var ix := r.get_center().x - 20.0 + float(i) * 20.0
-		var is_active: bool = map._panel_page == (i + 1)
-		var dot_col := Color("#c99b45") if is_active else Color("#9aaa94", 0.5)
-		draw_circle(Vector2(ix, indicator_y), 3.0 if is_active else 2.0, _ca(dot_col, a))
+	_draw_card_text(desc_text, desc_x, desc_y, desc_w, 5, a, Color("#c8c6ae"), 16.0)
 
 func _draw_panel_minimap(r: Rect2, a: float) -> void:
 	# Background
@@ -1196,17 +1220,35 @@ func _draw_panel_minimap(r: Rect2, a: float) -> void:
 		return
 	# Draw routes
 	var routes: Array = mm_data.get("routes", [])
+	var city_rect := r
+	for boundary in routes:
+		if not bool(boundary.get("wall", false)): continue
+		var boundary_pos := float(boundary.get("pos", 0.5))
+		if str(boundary.get("dir", "v")) == "v":
+			var wall_x := r.position.x + boundary_pos * r.size.x
+			if boundary_pos < 0.5:
+				city_rect.size.x = city_rect.end.x - wall_x
+				city_rect.position.x = wall_x
+			else: city_rect.size.x = wall_x - city_rect.position.x
+		else:
+			var wall_y := r.position.y + boundary_pos * r.size.y
+			if boundary_pos < 0.5:
+				city_rect.size.y = city_rect.end.y - wall_y
+				city_rect.position.y = wall_y
+			else: city_rect.size.y = wall_y - city_rect.position.y
 	for route in routes:
 		var rd: String = str(route.get("dir", "v"))
 		var rp: float = float(route.get("pos", 0.5))
 		var rw: float = float(route.get("width", 0.008)) * r.size.x
 		if rw < 4.0: rw = 6.0
+		var wall_line := bool(route.get("wall", false))
+		var line_color := Color("#656a65") if wall_line else Color("#d3a343")
 		if rd == "v":
 			var rx := r.position.x + rp * r.size.x
-			draw_rect(Rect2(rx - rw * 0.5, r.position.y, rw, r.size.y), _ca(Color("#d3a343"), a))
+			draw_rect(Rect2(rx - rw * 0.5, city_rect.position.y, rw, city_rect.size.y), _ca(line_color, a))
 		else:
 			var ry := r.position.y + rp * r.size.y
-			draw_rect(Rect2(r.position.x, ry - rw * 0.5, r.size.x, rw), _ca(Color("#d3a343"), a))
+			draw_rect(Rect2(city_rect.position.x, ry - rw * 0.5, city_rect.size.x, rw), _ca(line_color, a))
 	# Draw blocks
 	var blocks: Array = mm_data.get("blocks", [])
 	for blk in blocks:
@@ -1234,6 +1276,27 @@ func _draw_panel_minimap(r: Rect2, a: float) -> void:
 			var cx: float = bx + bw * 0.5
 			var cy: float = by + bh * 0.5
 			draw_string(map.font_hei, Vector2(cx - tw * 0.5, cy + fs * 0.35), blabel, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, _ca(lcol, a))
+	# 道路文字置于坊块之上，东西横排、南北逐字竖排。
+	for route in routes:
+		var road_name := str(route.get("name", ""))
+		if road_name == "": continue
+		var vertical := str(route.get("dir", "h")) == "v"
+		var road_pos := float(route.get("pos", 0.5))
+		var label_size := 13
+		# 名称连续紧排在中央道路段，不在路口拆开名称。
+		var pitch := 14.0 if vertical else 10.0
+		var wall := bool(route.get("wall", false))
+		var center := Vector2(r.position.x + road_pos * r.size.x, r.position.y + 0.495 * r.size.y - (0.0 if wall else 2.0 * pitch)) if vertical else Vector2(r.position.x + 0.495 * r.size.x, r.position.y + road_pos * r.size.y)
+		var extent := float(road_name.length() - 1) * pitch
+		var label_size_px := Vector2(14, extent + 14) if vertical else Vector2(extent + 14, 14)
+		# 城墙内侧约束包含整个底框，而非只约束文字中心。
+		if vertical and not wall:
+			center.y = clampf(center.y, city_rect.position.y + label_size_px.y * 0.5 + 8.0, city_rect.end.y - label_size_px.y * 0.5 - 8.0)
+		draw_rect(Rect2(center - label_size_px * 0.5, label_size_px), _ca(Color("#656a65") if wall else Color("#e8e3d5"), a))
+		for letter_index in range(road_name.length()):
+			var along := float(letter_index) * pitch - extent * 0.5
+			var point := center + (Vector2(0, along) if vertical else Vector2(along, 0))
+			_text_center(map.font_hei, road_name[letter_index], label_size, _ca(Color("#f0e4c4") if wall else Color("#604719"), a), point)
 	# Draw center label (for roads)
 	if mm_data.has("center_label"):
 		var cl: Dictionary = mm_data["center_label"]

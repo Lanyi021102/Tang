@@ -1,4 +1,5 @@
 {
+  "graph_base_url": "http://127.0.0.1:8080",
   "api_base_url": "https://ai.leihuo.netease.com/v1",
   "chat_path": "/chat/completions",
   "chat_via_backend": true,

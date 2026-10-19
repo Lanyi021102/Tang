@@ -59,7 +59,8 @@ func request_rag(
 	request_id: String,
 	query: String,
 	point_id: String = "",
-	options: Dictionary = {}
+	options: Dictionary = {},
+	emit_legacy: bool = false
 ) -> Error:
 	var clean_id := request_id.strip_edges()
 	if clean_id == "":
@@ -81,11 +82,12 @@ func request_rag(
 		"top_k": int(options.get("top_k", cfg.get("rag_top_k", 5))),
 		"temperature": float(options.get("temperature", cfg.get("temperature", 0.3))),
 		"max_tokens": int(options.get("max_tokens", cfg.get("max_tokens", 500))),
+		"mode": String(options.get("mode", "research")),
 	}
 	if body["point_id"] == "":
 		body.erase("point_id")
 	var endpoint := _join_url(base, String(cfg.get("rag_path", DEFAULT_RAG_PATH)))
-	return _begin_request(clean_id, "rag", endpoint, body, _build_headers(true), false)
+	return _begin_request(clean_id, "rag", endpoint, body, _build_headers(true), emit_legacy)
 
 
 func cancel_request(request_id: String = "") -> bool:
@@ -216,15 +218,55 @@ func _on_request_completed(
 	metadata["elapsed_ms"] = elapsed_ms
 	chat_completed.emit(request_id, content, metadata)
 	if emit_legacy:
-		chat_response.emit(content, "")
+		var legacy_content := content
+		if kind == "rag":
+			var suggestions: Array = metadata.get("suggested_questions", [])
+			if not suggestions.is_empty():
+				legacy_content += "\n【追问】"
+				for suggestion in suggestions.slice(0, 2): legacy_content += "\n" + str(suggestion)
+		chat_response.emit(legacy_content, "")
 	var usage: Dictionary = metadata.get("usage", {})
 	print("NetworkManager: request=%s status=%d elapsed_ms=%d usage=%s" % [request_id, response_code, elapsed_ms, JSON.stringify(usage)])
 
 
 func _extract_success(kind: String, parsed: Dictionary) -> Dictionary:
 	if kind == "rag":
+		var answer := String(parsed.get("answer", ""))
+		# 游戏选项只来自本轮模型回答；后端的通用推荐不能替代模型延伸问题。
+		var suggestions: Array = []
+		var generated_questions: Array = []
+		var in_questions := false
+		var clean_lines := PackedStringArray()
+		var numbering := RegEx.new()
+		numbering.compile("^\\s*(?:[-*]|[0-9]+[.、．)])\\s*")
+		var question_heading := RegEx.new()
+		question_heading.compile("(?:继续了解|继续探索|进一步了解|延伸|追问|推荐|思考).*(?:问题|提问)|(?:问题|提问).*(?:推荐|建议)")
+		for line in answer.split("\n"):
+			var heading := str(line).strip_edges().replace("#", "").replace("*", "").strip_edges()
+			if heading.begins_with("信息范围"): break
+			if question_heading.search(heading) != null and not numbering.search(heading):
+				in_questions = true
+				continue
+			if in_questions:
+				var question := numbering.sub(heading, "").strip_edges()
+				if question != "" and generated_questions.size() < 2:
+					if question.length() > 20:
+						question = question.left(19).trim_suffix("，").trim_suffix("、").trim_suffix("。") + "？"
+					generated_questions.append(question)
+				continue
+			clean_lines.append(line)
+		if generated_questions.size() == 2: suggestions = generated_questions
+		# 正文与按钮只使用同一组问题，避免后端通用建议与模型问题各自显示。
+		var question_section := ""
+		if suggestions.size() >= 2:
+			question_section = "\n\n适合继续了解的问题："
+			for i in range(2): question_section += "\n%d. %s" % [i + 1, str(suggestions[i])]
+		var prose := "\n".join(clean_lines).strip_edges()
+		var prose_limit := 300 - question_section.length()
+		if prose.length() > prose_limit:
+			prose = prose.left(prose_limit - 1).strip_edges() + "…"
 		return {
-			"content": String(parsed.get("answer", "")),
+			"content": prose + question_section,
 			"error": "RAG 响应缺少 answer",
 			"metadata": {
 				"sources": parsed.get("sources", []),
@@ -232,7 +274,7 @@ func _extract_success(kind: String, parsed: Dictionary) -> Dictionary:
 				"conversation_id": parsed.get("conversation_id", ""),
 				"message_id": parsed.get("message_id", ""),
 				"linked_entities": parsed.get("linked_entities", []),
-				"suggested_questions": parsed.get("suggested_questions", []),
+				"suggested_questions": suggestions,
 				"confidence": parsed.get("confidence", ""),
 				"insufficient_evidence": parsed.get("insufficient_evidence", false),
 				"model": parsed.get("model", ""),
